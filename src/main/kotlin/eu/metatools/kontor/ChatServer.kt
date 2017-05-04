@@ -1,6 +1,9 @@
 package eu.metatools.kontor
 
+import eu.metatools.kontor.server.Connected
 import eu.metatools.kontor.tools.await
+import eu.metatools.kontor.tools.sendAll
+import eu.metatools.kontor.tools.sendAllExcept
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
@@ -32,7 +35,7 @@ fun main(args: Array<String>) = runBlocking {
 
     // Handling of messages
     launch(CommonPool) {
-        for ((c, msg) in k.inbound) {
+        for ((msg, c) in k.inbound) {
             if (msg is Message) {
                 history += msg
 
@@ -42,7 +45,7 @@ fun main(args: Array<String>) = runBlocking {
             }
 
             // Loopback any message
-            k.outboundInvDesignated.send(c to msg)
+            k.outbound.sendAllExcept(msg, c)
         }
     }
 
@@ -50,7 +53,7 @@ fun main(args: Array<String>) = runBlocking {
     for (s in generateSequence(::readLine).takeWhile(String::isNotEmpty)) {
         val msg = Message(username, s)
         history += msg
-        k.outbound.send(msg)
+        k.outbound.sendAll(msg)
     }
 
     println("Stopping server")

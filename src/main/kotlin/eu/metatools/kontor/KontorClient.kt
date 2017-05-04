@@ -3,19 +3,21 @@ package eu.metatools.kontor
 import eu.metatools.kontor.serialization.KSerializationHandler
 import eu.metatools.kontor.serialization.serializerOf
 import eu.metatools.kontor.tools.*
-import io.netty.channel.*
-import io.netty.channel.ChannelOption.*
-import kotlinx.coroutines.experimental.runBlocking
-import io.netty.channel.socket.nio.NioSocketChannel
+import io.netty.channel.Channel
+import io.netty.channel.ChannelFuture
+import io.netty.channel.ChannelHandlerContext
+import io.netty.channel.ChannelInboundHandlerAdapter
+import io.netty.channel.ChannelOption.SO_KEEPALIVE
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
-import io.netty.util.concurrent.Future
+import io.netty.channel.socket.nio.NioSocketChannel
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.channels.actor
+import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.runBlocking
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
 import kotlin.serialization.KSerializer
-
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
 /**
@@ -24,7 +26,7 @@ import kotlinx.coroutines.experimental.channels.Channel as DataChannel
  */
 class KontorClient(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>) {
+        val serializers: List<KSerializer<*>>) : Kontor<Any?, Any?> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -92,12 +94,12 @@ class KontorClient(
     /**
      * The inbound data channel.
      */
-    val inbound = DataChannel<Any?>()
+    override val inbound = DataChannel<Any?>()
 
     /**
      * The outbound data broadcast channel.
      */
-    val outbound = actor<Any?>(CommonPool) {
+    override val outbound = actor<Any?>(CommonPool) {
         for (msg in channel)
             clientChannel?.writeAndFlush(msg)
     }
@@ -105,14 +107,14 @@ class KontorClient(
     /**
      * Starts the client and returns the future notifying after the connect.
      */
-    fun start(address: String, port: Int): ChannelFuture {
+    override fun start(host: String, port: Int): ChannelFuture {
         if (!groupUsable)
             throw IllegalStateException("Workers are already shutdown")
 
         if (clientChannel != null)
             throw IllegalStateException("Client already connected")
 
-        return bootstrap.connect(address, port).apply {
+        return bootstrap.connect(host, port).apply {
             addListener {
                 clientChannel = channel()
             }
@@ -134,7 +136,7 @@ class KontorClient(
     /**
      * Stops the client and returns the future notifying after the close.
      */
-    fun stop(): ChannelFuture {
+    override fun stop(): ChannelFuture {
         if (!groupUsable)
             throw IllegalStateException("Workers are already shutdown")
 
@@ -150,5 +152,7 @@ class KontorClient(
     /**
      * Completely shuts down the workers.
      */
-    fun shutdown(): Future<*> = workerGroup.shutdownGracefully()
+    override fun shutdown() = launch(CommonPool) {
+        await(workerGroup.shutdownGracefully())
+    }
 }

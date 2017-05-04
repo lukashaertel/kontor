@@ -2,6 +2,7 @@ package eu.metatools.kontor
 
 import eu.metatools.kontor.serialization.KSerializationHandler
 import eu.metatools.kontor.serialization.serializerOf
+import eu.metatools.kontor.server.*
 import eu.metatools.kontor.tools.*
 import io.netty.channel.*
 import io.netty.channel.ChannelHandler.Sharable
@@ -20,14 +21,15 @@ import kotlin.serialization.KSerializer
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
 /**
- * Provides network interaction as a server. [inbound] will receive all incoming messages, [outbound],
- * [outboundDesignated] and [outboundInvDesignated] will take all outgoing messages. Network status may be queried by
- * calling [channels] or by subscribing to [network].
+ * Provides network interaction as a server. [inbound] will receive all incoming messages, [outbound] will take all
+ * outgoing messages. Network status may be queried by calling [channels] or by subscribing to [network].
+ *
+ * As server side sending requires designation, [inbound] and [outbound] are enveloped using [From] and [To]
  */
 class KontorServer(
         val charset: Charset = Charsets.UTF_8,
         val serializers: List<KSerializer<*>>,
-        val backlog: Int = 128) {
+        val backlog: Int = 128) : Kontor<From, To> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -92,7 +94,7 @@ class KontorServer(
         }
 
         override fun channelRead(ctx: ChannelHandlerContext, msg: Any) = runBlocking {
-            inbound.send(ctx.channel(), msg)
+            inbound.send(From(msg, ctx.channel()))
         }
     }
 
@@ -128,45 +130,34 @@ class KontorServer(
     /**
      * The inbound data channel.
      */
-    val inbound = DataChannel<Pair<Channel, Any?>>()
+    override val inbound = DataChannel<From>()
 
     /**
      * The outbound data broadcast channel.
      */
-    val outbound = actor<Any?>(CommonPool) {
+    override val outbound = actor<To>(CommonPool) {
         for (msg in channel)
-            for (c in channels)
-                c.writeAndFlush(msg)
+            when (msg) {
+                is ToAll -> for (c in channels) c.writeAndFlush(msg.content)
+                is ToAllExcept -> for (c in channels) if (c != msg.except) c.writeAndFlush(msg.content)
+                is ToOnly -> msg.to.writeAndFlush(msg.content)
+            }
+
     }
 
-    /**
-     * The designated outbound data channel, messages will be sent to the channel in the pair only.
-     */
-    val outboundDesignated = actor<Pair<Channel, Any?>>(CommonPool) {
-        for ((c, msg) in channel)
-            c.writeAndFlush(msg)
-    }
-
-    /**
-     * The invert desginated outbound data channel, messages will be sent to all channels except the one in the pair.
-     */
-    val outboundInvDesignated = actor<Pair<Channel, Any?>>(CommonPool) {
-        for ((nc, msg) in channel)
-            for (c in channels - nc)
-                c.writeAndFlush(msg)
-    }
+    fun start(port: Int) = start("0.0.0.0", port)
 
     /**
      * Starts the server and returns the future notifying after the bind.
      */
-    fun start(port: Int): ChannelFuture {
+    override fun start(host: String, port: Int): ChannelFuture {
         if (!groupsUsable)
             throw IllegalStateException("Workers are already shutdown")
 
         if (serverChannel != null)
             throw IllegalStateException("Server already started")
 
-        return bootstrap.bind(port).apply {
+        return bootstrap.bind(host, port).apply {
             addListener {
                 serverChannel = channel()
             }
@@ -176,7 +167,7 @@ class KontorServer(
     /**
      * Stops the server and returns the future notifying after the close.
      */
-    fun stop(): ChannelFuture {
+    override fun stop(): ChannelFuture {
         if (!groupsUsable)
             throw IllegalStateException("Workers are already shutdown")
 
@@ -192,7 +183,7 @@ class KontorServer(
     /**
      * Completely shuts down the workers.
      */
-    fun shutdown() = launch(CommonPool) {
+    override fun shutdown() = launch(CommonPool) {
         // Close workers
         val w = workerGroup.shutdownGracefully()
         val b = bossGroup.shutdownGracefully()

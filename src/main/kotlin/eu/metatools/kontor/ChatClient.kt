@@ -43,6 +43,6 @@ fun main(args: Array<String>) = runBlocking<Unit> {
     println("Terminating workers")
     val j = k.shutdown()
     println("Waiting for termination")
-    await(j)
+    j.join()
     println("Gracefully shut down")
 }

@@ -1,4 +1,4 @@
-package eu.metatools.kontor
+package eu.metatools.kontor.server
 
 import io.netty.channel.Channel
 
