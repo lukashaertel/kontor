@@ -1,0 +1,47 @@
+group 'eu.metatools.kontor'
+version '1.0-SNAPSHOT'
+
+buildscript {
+    ext.kotlin_version = '1.1.2-2'
+    ext.coroutines_version = '0.14'
+
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath files("lib/kotlin-serialization-gradle.jar")
+    }
+}
+
+apply plugin: 'kotlin'
+
+repositories {
+    mavenCentral()
+    jcenter()
+}
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
+
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version"
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:$coroutines_version"
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-nio:$coroutines_version"
+
+    compile files("lib/kotlin-serialization-runtime.jar")
+
+    compile "io.netty:netty-all:4.1.10.Final"
+    compile "org.apache.commons:commons-compress:1.13"
+    compile "net.sf.opencsv:opencsv:2.3"
+}
+
+compileKotlin {
+    kotlinOptions.freeCompilerArgs += ["-Xplugin", "lib/kotlin-serialization-gradle.jar"]
+}
+
+kotlin {
+    experimental {
+        coroutines "enable"
+    }
+}
