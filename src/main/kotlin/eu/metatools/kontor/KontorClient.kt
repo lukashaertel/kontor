@@ -9,6 +9,7 @@ import kotlinx.coroutines.experimental.runBlocking
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
+import io.netty.util.concurrent.Future
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.channels.actor
 import java.nio.charset.Charset
@@ -119,7 +120,7 @@ class KontorClient(
     }
 
     /**
-     * Suspends until the client is disconnected from a closed server.
+     * Returns the future notifying after disconnection.
      */
     fun disconnect(): ChannelFuture {
         if (!groupUsable)
@@ -149,5 +150,5 @@ class KontorClient(
     /**
      * Completely shuts down the workers.
      */
-    fun shutdown() = workerGroup.shutdownGracefully()
+    fun shutdown(): Future<*> = workerGroup.shutdownGracefully()
 }
