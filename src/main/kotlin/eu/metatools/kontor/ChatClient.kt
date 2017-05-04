@@ -1,7 +1,9 @@
 package eu.metatools.kontor
 
 import eu.metatools.kontor.tools.await
+import eu.metatools.kontor.tools.consoleLines
 import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 
@@ -16,18 +18,19 @@ fun main(args: Array<String>) = runBlocking<Unit> {
 
     // Handling of messages
     launch(CommonPool) {
-        for (msg in k.inbound)
-            if (msg is Message) {
-                print(msg.username)
+        k.inbound.consumeEach {
+            if (it is Message) {
+                print(it.username)
                 print(": ")
-                println(msg.string)
+                println(it.string)
             }
+        }
     }
 
     // Handling of input
     launch(CommonPool) {
         // User input
-        for (s in generateSequence(::readLine).takeWhile(String::isNotEmpty))
+        for (s in consoleLines)
             k.outbound.send(Message(username, s))
 
         println("Disconnecting from server")
@@ -39,10 +42,7 @@ fun main(args: Array<String>) = runBlocking<Unit> {
     // Handling of a remote termination
     await(k.disconnect())
 
-
     println("Terminating workers")
-    val j = k.shutdown()
-    println("Waiting for termination")
-    j.join()
-    println("Gracefully shut down")
+
+    k.shutdown().join()
 }

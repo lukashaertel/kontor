@@ -1,10 +1,13 @@
 package eu.metatools.kontor
 
 import eu.metatools.kontor.server.Connected
+import eu.metatools.kontor.server.Disconnected
 import eu.metatools.kontor.tools.await
+import eu.metatools.kontor.tools.consoleLines
 import eu.metatools.kontor.tools.sendAll
 import eu.metatools.kontor.tools.sendAllExcept
 import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import kotlin.serialization.Serializable
@@ -24,18 +27,23 @@ fun main(args: Array<String>) = runBlocking {
 
     // Network management messages
     launch(CommonPool) {
-        for (m in k.network) {
-            if (m is Connected)
-                for (msg in history)
-                    m.channel.writeAndFlush(msg)
-
-            println("<< $m >>")
+        k.network.consumeEach {
+            when (it) {
+                is Connected -> {
+                    for (msg in history)
+                        it.channel.writeAndFlush(msg)
+                    println("Connected: ${it.channel.remoteAddress()}")
+                }
+                is Disconnected -> {
+                    println("Disconnected: ${it.channel.remoteAddress()}")
+                }
+            }
         }
     }
 
     // Handling of messages
     launch(CommonPool) {
-        for ((msg, c) in k.inbound) {
+        k.inbound.consumeEach { (msg, c) ->
             if (msg is Message) {
                 history += msg
 
@@ -50,7 +58,7 @@ fun main(args: Array<String>) = runBlocking {
     }
 
     // User input
-    for (s in generateSequence(::readLine).takeWhile(String::isNotEmpty)) {
+    for (s in consoleLines) {
         val msg = Message(username, s)
         history += msg
         k.outbound.sendAll(msg)
@@ -60,10 +68,7 @@ fun main(args: Array<String>) = runBlocking {
 
     await(k.stop())
 
-
     println("Terminating workers")
-    val j = k.shutdown()
-    println("Waiting for termination")
-    j.join()
-    println("Gracefully shut down")
+
+    k.shutdown().join()
 }
