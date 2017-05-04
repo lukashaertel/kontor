@@ -1,13 +1,15 @@
 package eu.metatools.kontor
 
+import eu.metatools.kontor.tools.applyIfIs
 import eu.metatools.kontor.tools.await
 import eu.metatools.kontor.tools.consoleLines
+import eu.metatools.kontor.tools.launchConsumer
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 
-fun main(args: Array<String>) = runBlocking<Unit> {
+fun main(args: Array<String>) = runBlocking {
     val k = KontorClient(Message::class)
     println("Connecting to server")
 
@@ -17,13 +19,9 @@ fun main(args: Array<String>) = runBlocking<Unit> {
     val username = readLine()!!
 
     // Handling of messages
-    launch(CommonPool) {
-        k.inbound.consumeEach {
-            if (it is Message) {
-                print(it.username)
-                print(": ")
-                println(it.string)
-            }
+    k.inbound.launchConsumer {
+        it.applyIfIs<Message> {
+            println("$username: $string")
         }
     }
 

@@ -2,10 +2,7 @@ package eu.metatools.kontor
 
 import eu.metatools.kontor.server.Connected
 import eu.metatools.kontor.server.Disconnected
-import eu.metatools.kontor.tools.await
-import eu.metatools.kontor.tools.consoleLines
-import eu.metatools.kontor.tools.sendAll
-import eu.metatools.kontor.tools.sendAllExcept
+import eu.metatools.kontor.tools.*
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.launch
@@ -26,43 +23,37 @@ fun main(args: Array<String>) = runBlocking {
     val history = arrayListOf<Message>()
 
     // Network management messages
-    launch(CommonPool) {
-        k.network.consumeEach {
-            when (it) {
-                is Connected -> {
-                    for (msg in history)
-                        it.channel.writeAndFlush(msg)
-                    println("Connected: ${it.channel.remoteAddress()}")
-                }
-                is Disconnected -> {
-                    println("Disconnected: ${it.channel.remoteAddress()}")
-                }
+    k.network.launchConsumer {
+        when (it) {
+            is Connected -> {
+                for (msg in history)
+                    it.channel.writeAndFlush(msg)
+                println("Connected: ${it.channel.remoteAddress()}")
+            }
+            is Disconnected -> {
+                println("Disconnected: ${it.channel.remoteAddress()}")
             }
         }
     }
 
     // Handling of messages
-    launch(CommonPool) {
-        k.inbound.consumeEach { (msg, c) ->
-            if (msg is Message) {
-                history += msg
-
-                print(msg.username)
-                print(": ")
-                println(msg.string)
-            }
-
-            // Loopback any message
-            k.outbound.sendAllExcept(msg, c)
+    k.inbound.launchConsumer { (msg, c) ->
+        msg.applyIfIs<Message> {
+            history += this
+            println("$username: $string")
         }
+
+        // Loopback any message
+        k.outbound.sendAllExcept(msg, c)
     }
+
 
     // User input
-    for (s in consoleLines) {
-        val msg = Message(username, s)
-        history += msg
-        k.outbound.sendAll(msg)
-    }
+    for (s in consoleLines)
+        Message(username, s).apply {
+            history += this
+            k.outbound.sendAll(this)
+        }
 
     println("Stopping server")
 

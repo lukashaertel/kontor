@@ -4,6 +4,7 @@ import io.netty.channel.ChannelFuture
 import kotlinx.coroutines.experimental.Job
 import kotlinx.coroutines.experimental.channels.ActorJob
 import kotlinx.coroutines.experimental.channels.ReceiveChannel
+import kotlinx.coroutines.experimental.channels.SendChannel
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
 /**
@@ -18,7 +19,7 @@ interface Kontor<out In, in Out> {
     /**
      * The outbound channel.
      */
-    val outbound: ActorJob<Out>
+    val outbound: SendChannel<Out>
 
     /**
      * Starts a connection or opens for connecting.
