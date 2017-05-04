@@ -17,10 +17,13 @@ import kotlin.serialization.KSerializer
 
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
+/**
+ * Provides network interaction as a client. [inbound] will receive all incoming messages, [outbound] will take all
+ * outgoing messages.
+ */
 class KontorClient(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>
-) {
+        val serializers: List<KSerializer<*>>) {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -118,7 +121,7 @@ class KontorClient(
     /**
      * Suspends until the client is disconnected from a closed server.
      */
-    suspend fun disconnect(): ChannelFuture {
+    fun disconnect(): ChannelFuture {
         if (!groupUsable)
             throw IllegalStateException("Workers are already shutdown")
 
