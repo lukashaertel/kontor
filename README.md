@@ -7,6 +7,8 @@ See an exampel chat [client](https://github.com/lukashaertel/kontor/blob/master/
 ## Building
 The project should build out of the box. To run properly in IntelliJ, edit the run configuration of the respective main and replace the Kotlin build with a call to the gradle task build. This is neccessary since this project utilizes the serialization compiler plugin.
 
+![IntelliJ run configuration](https://github.com/lukashaertel/kontor/raw/wsdata/config.png)
+
 ## Other takeaways
 This project lays out how to:
 * bridge [Netty](http://netty.io/) and Kotlin coroutines.
