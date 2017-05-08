@@ -29,13 +29,11 @@ fun main(args: Array<String>) = runBlocking {
 
 ```
 
-Once the username is entered, the chat client is properly configured, a repeated task is launched for all inbound messages, printing them.
+Once the username is entered, the chat client is properly configured, a repeated task is launched that consumes a channel, picking only Messages and printing them.
 
 ```kotlin
-    k.inbound.launchConsumer {
-        it.applyIfIs<Message> {
-            println("$username: $string")
-        }
+   k.inbound pick { (n, s): Message ->
+        println("$n: $s")
     }
 ```
 
@@ -77,31 +75,28 @@ fun main(args: Array<String>) = runBlocking {
 
 ```
 
-Upon connection, all messages in the history are sent to the new client.
+From the network management channel, all `Connected` messages are chosen and handled by sending the new client the existing history. From the remaining network management messages, `Disconnected` is logged.
 
 ```kotlin
-    k.network.launchConsumer {
-        when (it is Connected) {
-            for (msg in history)
-                it.channel.writeAndFlush(msg)
-        }
+    k.network choose { c: Connected ->
+        for (msg in history)
+            c.channel.writeAndFlush(msg)
+        println("Connected: ${c.channel.remoteAddress()}")
+    } pick { d: Disconnected ->
+        println("Disconnected: ${d.channel.remoteAddress()}")
     }
-
 ```
 
 All incoming messages are sent to all clients except the sender, they are also backed in the history.
 
 ```kotlin
-    k.inbound.launchConsumer { (msg, c) ->
-        msg.applyIfIs<Message> {
-            history += this
-            println("$username: $string")
-        }
+    k.inbound pick { (msg, c): From<Message> ->
+        history += msg
+        println("${msg.username}: ${msg.string}")
 
+        // Loopback any message
         k.outbound.sendAllExcept(msg, c)
     }
-
-
 ```
 
 The server itself can also chat. Messages are added to the histroy and sent to all clients. When no more lines are available (an empty line was entered), the server terminates.
