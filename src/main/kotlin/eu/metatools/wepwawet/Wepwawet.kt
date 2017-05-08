@@ -9,19 +9,31 @@ import kotlin.reflect.KProperty
 class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
     interface Call
 
-    class CallSimulated : Call
+    class CallSimulated : Call {
+        override fun toString() = "<<simulated>>"
+    }
 
-    class CallInit : Call
+    class CallInit : Call {
+        override fun toString() = "<<init>>"
+    }
 
-    data class CallImpulse(val kProperty: KProperty<*>) : Call
+    data class CallImpulse(val kProperty: KProperty<*>) : Call {
+        override fun toString() = "<<impulse ${kProperty.name}>>"
+    }
 
     interface Dep
 
-    data class DepInit(val kProperty: KProperty<*>) : Dep
+    data class DepInit(val kProperty: KProperty<*>) : Dep {
+        override fun toString() = "init ${kProperty.name}"
+    }
 
-    data class DepRead(val kProperty: KProperty<*>) : Dep
+    data class DepRead(val kProperty: KProperty<*>) : Dep {
+        override fun toString() = "read ${kProperty.name}"
+    }
 
-    data class DepWrite(val kProperty: KProperty<*>) : Dep
+    data class DepWrite(val kProperty: KProperty<*>) : Dep {
+        override fun toString() = "write ${kProperty.name}"
+    }
 
     private val deps = Tracker<Call, Dep>()
 
@@ -91,7 +103,7 @@ class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
         val touched = deps.trackIn(CallImpulse(property)) {
             receiver.impulse(value)
         }
-        println(touched)
+        touched.stats()
     }
 
     fun <R : Entity<I>> obtain(provider: (Wepwawet<I>, I) -> R) =
