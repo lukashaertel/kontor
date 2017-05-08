@@ -88,11 +88,10 @@ inline fun <R : Entity<I>, I, T> R.dynamicOf(default: T, crossinline conf: Confi
             this.default = default
         }
 
-
-inline fun <R : Entity<I>, I> R.action(crossinline execute: () -> Unit) =
+// TODO Consistency checks to revert only partially
+fun <R : Entity<I>, I, T> R.impulse(execute: R.(T) -> Unit) =
         provideDelegate { r: R, p: KProperty<*> ->
-            object : Action<R, I>() {
-                override fun execute() = execute()
-            } as Action<R, I>
+            r.parent.registerImpulse(p, execute)
+            Impulse(execute)
         }
 

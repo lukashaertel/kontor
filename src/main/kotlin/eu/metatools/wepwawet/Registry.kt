@@ -42,7 +42,7 @@ interface Registry<in I> {
     /**
      * Prints the stats of the parent, might be unsupported and just print the [toString].
      */
-    fun stats(currentTime:Long) {
+    fun stats(currentTime: Long) {
         println(toString())
     }
 }
