@@ -8,8 +8,13 @@ class Test(
 
     var z by dynamicOf(2)
 
+    val otherMutate by impulse { i: Int ->
+        z -= i
+    }
+
     val mutate by impulse { i: Int ->
         y += i * z
+        otherMutate(1)
     }
 }
 
@@ -24,13 +29,15 @@ fun main(args: Array<String>) {
     test2.mutate(readLine()?.toInt() ?: 0)
 
     w.time = 1
-
-    test1.y = 400
-
+    w.simulateImpulse {
+        test1.y = 400
+    }
     w.time = 2
 
 
-    test2.z = 234
+    w.simulateImpulse {
+        test2.z = 234
+    }
 
     w.stats()
 }

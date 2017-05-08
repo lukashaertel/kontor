@@ -1,22 +1,30 @@
 package eu.metatools.wepwawet
 
+import eu.metatools.wepwawet.tracking.Tracker
 import org.funktionale.option.getOrElse
-import java.util.*
-import kotlin.reflect.KCallable
-import kotlin.reflect.KFunction
+import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
-
-/**
- * Created by pazuzu on 5/5/17.
- */
 
 // TODO Network synchronized identities [newId]
 class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
-    private var call = null as KProperty<*>?
+    interface Call
 
-    private val depends = arrayListOf<KProperty<*>>()
+    class CallSimulated : Call
 
-    private val writes = arrayListOf<KProperty<*>>()
+    class CallInit : Call
+
+    data class CallImpulse(val kProperty: KProperty<*>) : Call
+
+    interface Dep
+
+    data class DepInit(val kProperty: KProperty<*>) : Dep
+
+    data class DepRead(val kProperty: KProperty<*>) : Dep
+
+    data class DepWrite(val kProperty: KProperty<*>) : Dep
+
+    private val deps = Tracker<Call, Dep>()
+
 
     var time: Long = 0
 
@@ -31,15 +39,17 @@ class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
 
     // TODO Constructor behaviour
     fun <T> staticInit(receiver: Entity<I>, property: KProperty<*>, value: T, config: Config<T>) {
+        deps.touch(DepInit(property))
         registry.set(receiver.id, time, property, value)
     }
 
     fun <T> dynamicInit(receiver: Entity<I>, property: KProperty<*>, value: T, config: Config<T>) {
+        deps.touch(DepInit(property))
         registry.set(receiver.id, time, property, value)
     }
 
     fun <T> staticGet(receiver: Entity<I>, property: KProperty<*>, config: Config<T>): T {
-        depends += property
+        deps.touch(DepRead(property))
         return registry
                 .get(receiver.id, time, property) {
                     @Suppress("UNCHECKED_CAST")
@@ -49,7 +59,7 @@ class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
     }
 
     fun <T> dynamicGet(receiver: Entity<I>, property: KProperty<*>, config: Config<T>): T {
-        depends += property
+        deps.touch(DepRead(property))
         return registry
                 .get(receiver.id, time, property) {
                     @Suppress("UNCHECKED_CAST")
@@ -59,7 +69,7 @@ class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
     }
 
     fun <T> dynamicSet(receiver: Entity<I>, property: KProperty<*>, value: T, config: Config<T>) {
-        writes += property
+        deps.touch(DepWrite(property))
         registry.set(receiver.id, time, property, value)
     }
 
@@ -78,28 +88,38 @@ class Wepwawet<I>(val registry: Registry<I>, val newId: () -> I) {
     }
 
     fun <R : Entity<I>, T> impulseExecute(receiver: R, property: KProperty<*>, value: T, impulse: R.(T) -> Unit) {
-        call = property
-
-        receiver.impulse(value)
-
-        println(call)
-        println("Depends $depends")
-        println("Writes $writes")
-
-        call = null
-        depends.clear()
-        writes.clear()
+        val touched = deps.trackIn(CallImpulse(property)) {
+            receiver.impulse(value)
+        }
+        println(touched)
     }
 
-    inline fun <reified R : Entity<I>> obtain(provider: (Wepwawet<I>, I) -> R) =
-            provider(this, newId()).apply { register(this) }
+    fun <R : Entity<I>> obtain(provider: (Wepwawet<I>, I) -> R) =
+            deps.trackLet(CallInit()) {
+                provider(this, newId()).apply {
+                    register(this)
+                }
+            }
 
-    inline fun <reified R : Entity<I>, T> obtain(provider: (Wepwawet<I>, I, T) -> R, t: T) =
-            provider(this, newId(), t).apply { register(this) }
+    fun <R : Entity<I>, T> obtain(provider: (Wepwawet<I>, I, T) -> R, t: T) =
+            deps.trackLet(CallInit()) {
+                provider(this, newId(), t).apply {
+                    register(this)
+                }
+            }
 
-    inline fun <reified R : Entity<I>, T1, T2> obtain(provider: (Wepwawet<I>, I, T1, T2) -> R, t1: T1, t2: T2) =
-            provider(this, newId(), t1, t2).apply { register(this) }
+    fun <R : Entity<I>, T1, T2> obtain(provider: (Wepwawet<I>, I, T1, T2) -> R, t1: T1, t2: T2) =
+            deps.trackLet(CallInit()) {
+                provider(this, newId(), t1, t2).apply {
+                    register(this)
+                }
+            }
 
+    fun simulateImpulse(block: () -> Unit) {
+        deps.trackIn(CallSimulated()) {
+            block()
+        }
+    }
 
     fun stats() = registry.stats(time)
 
