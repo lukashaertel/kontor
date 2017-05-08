@@ -1,11 +1,7 @@
 package eu.metatools.kontor
 
-import eu.metatools.kontor.tools.applyIfIs
-import eu.metatools.kontor.tools.await
-import eu.metatools.kontor.tools.consoleLines
-import eu.metatools.kontor.tools.launchConsumer
+import eu.metatools.kontor.tools.*
 import kotlinx.coroutines.experimental.CommonPool
-import kotlinx.coroutines.experimental.channels.consumeEach
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 
@@ -19,10 +15,8 @@ fun main(args: Array<String>) = runBlocking {
     val username = readLine()!!
 
     // Handling of messages
-    k.inbound.launchConsumer {
-        it.applyIfIs<Message> {
-            println("$username: $string")
-        }
+    k.inbound pick { (n, s): Message ->
+        println("$n: $s")
     }
 
     // Handling of input

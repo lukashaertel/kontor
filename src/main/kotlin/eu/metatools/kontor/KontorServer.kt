@@ -29,7 +29,7 @@ import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 class KontorServer(
         val charset: Charset = Charsets.UTF_8,
         val serializers: List<KSerializer<*>>,
-        val backlog: Int = 128) : Kontor<From, To> {
+        val backlog: Int = 128) : Kontor<From<Any>, To<Any>> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -130,17 +130,17 @@ class KontorServer(
     /**
      * The inbound data channel.
      */
-    override val inbound = DataChannel<From>()
+    override val inbound = DataChannel<From<Any>>()
 
     /**
      * The outbound data broadcast channel.
      */
-    override val outbound = actor<To>(CommonPool) {
+    override val outbound = actor<To<Any>>(CommonPool) {
         for (msg in channel)
             when (msg) {
-                is ToAll -> for (c in channels) c.writeAndFlush(msg.content)
-                is ToAllExcept -> for (c in channels) if (c != msg.except) c.writeAndFlush(msg.content)
-                is ToOnly -> msg.to.writeAndFlush(msg.content)
+                is ToAll<Any> -> for (c in channels) c.writeAndFlush(msg.content)
+                is ToAllExcept<Any> -> for (c in channels) if (c != msg.except) c.writeAndFlush(msg.content)
+                is ToOnly<Any> -> msg.to.writeAndFlush(msg.content)
             }
 
     }

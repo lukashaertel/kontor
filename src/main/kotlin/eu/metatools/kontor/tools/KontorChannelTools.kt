@@ -10,17 +10,17 @@ import kotlinx.coroutines.experimental.channels.SendChannel
 /**
  * Sends a [ToAll] envelope.
  */
-suspend fun SendChannel<To>.sendAll(content: Any?) =
+suspend fun <T> SendChannel<To<T>>.sendAll(content: T) =
         send(ToAll(content))
 
 /**
  * Sends a [ToOnly] envelope.
  */
-suspend fun SendChannel<To>.sendOnly(content: Any?, to: Channel) =
+suspend fun <T> SendChannel<To<T>>.sendOnly(content: T, to: Channel) =
         send(ToOnly(content, to))
 
 /**
  * Sends a [ToAllExcept] envelope.
  */
-suspend fun SendChannel<To>.sendAllExcept(content: Any?, to: Channel) =
+suspend fun <T> SendChannel<To<T>>.sendAllExcept(content: T, to: Channel) =
         send(ToAllExcept(content, to))
