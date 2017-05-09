@@ -1,10 +1,12 @@
 package eu.metatools.wepwawet
 
 import eu.metatools.wepwawet.calls.*
+import eu.metatools.wepwawet.components.EntityTable
 import eu.metatools.wepwawet.tracking.Tracker
 import eu.metatools.wepwawet.delegates.*
 import eu.metatools.wepwawet.components.RevisionTable
 import eu.metatools.wepwawet.net.Net
+import eu.metatools.wepwawet.tools.diff
 import org.funktionale.option.getOrElse
 import kotlin.reflect.KProperty
 
@@ -12,20 +14,25 @@ import kotlin.reflect.KProperty
 // TODO Network synchronized identities [newId]
 class Wepwawet(
         val revisionTable: RevisionTable,
+        val entityTable: EntityTable,
         val net: Net) {
 
     private val tracker = Tracker()
 
     var time: Long = 0
 
-    operator fun contains(item: Entity) = false
+    operator fun contains(item: Entity) = entityTable[item.id] == item
 
     fun register(item: Entity) {
-
+        if (entityTable.putIfAbsent(item.id, item) != null)
+            throw IllegalStateException("$item maps to already registered identity")
     }
 
     fun release(item: Entity) {
-        net.releaseId(item.id)
+        if (entityTable.remove(item.id, item))
+            net.releaseId(item.id)
+        else
+            throw IllegalStateException("$item is not registered")
     }
 
     fun <R : Entity> obtain(provider: (Wepwawet, Int) -> R) =
@@ -49,6 +56,7 @@ class Wepwawet(
                 }
             }
 
+    // TODO Minify call stacks, a lot of var/val behaviour is local and does not need indirection
     // TODO Constructor behaviour
     fun <R : Entity, T> staticInit(receiver: Entity, property: KProperty<*>, static: Static<R, T>) {
         tracker.touch(DepInit(property))
@@ -116,7 +124,12 @@ class Wepwawet(
         val touched = tracker.trackIn(CallUpdate(property)) {
             update.block(receiver)
         }
-        touched.stats()
+        val reads = touched.allDependencies.filterIsInstance<DepRead>().map { it.kProperty }.toSet()
+        val (under, over) = reads diff update.depends
+        if (under.isNotEmpty())
+            throw IllegalStateException("Under-declared dependencies for ${property.name}: $under")
+        if (over.isNotEmpty())
+            println("Over-declared dependencies for ${property.name}: $over")
     }
 
     fun <R : Entity, T> impulseExecute(receiver: R, property: KProperty<*>, value: T, impulse: Impulse<R, T>) {
@@ -133,6 +146,14 @@ class Wepwawet(
         touched.stats()
     }
 
-    fun stats() = revisionTable.stats(time)
+    fun stats() =
+            revisionTable.stats(time)
 
+    fun start(block: () -> Unit) {
+        // TODO: Lobby data, i.e., game configuration needs to be exchanged and provided to block.
+        // TODO: [block] runs as the initialization function for a synchronous start and serves as game initialization
+        // TODO: [block] does not run on late join, instead, [revisionTable] and `calls to revert` are transferred.
+    }
+
+    fun stop() {}
 }

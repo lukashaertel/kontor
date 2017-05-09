@@ -57,7 +57,7 @@ inline fun <R : Entity, T> R.dynamicOf(default: T, crossinline conf: Configurato
 
 fun <R : Entity> R.reactTo(vararg kProperty: KProperty<*>, execute: R.() -> Unit) =
         provideDelegate { r: R, p: KProperty<*> ->
-            Update(kProperty.toList(), execute).apply {
+            Update(kProperty.toSet(), execute).apply {
                 r.parent.registerUpdate(p, this)
             }
         }

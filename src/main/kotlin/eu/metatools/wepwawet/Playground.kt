@@ -6,17 +6,22 @@ import eu.metatools.wepwawet.delegates.reactTo
 import eu.metatools.wepwawet.components.MapRevisionTable
 import eu.metatools.wepwawet.net.Net
 import kotlinx.coroutines.experimental.channels.Channel
+import java.lang.Math.sqrt
 
 
 class Test(
         override val parent: Wepwawet,
         override val id: Int) : Entity {
+    // Statics and dynamics just need to be tracked locally
     var y by dynamicOf(100)
 
     var z by dynamicOf(2)
 
     var sum = 0
 
+    var ysqrt = 0
+
+    // Impulses need to be transferred with their parameters
     val otherMutate by impulse { i: Int ->
         z -= i
     }
@@ -26,18 +31,28 @@ class Test(
         otherMutate(1)
     }
 
-    val updateSum by reactTo(this::y, this::z) {
+    // Updates need to be initialized and triggered on changes
+    val updateSum by reactTo(Test::y, Test::z) {
         sum = y + z
+    }
+
+    val updateOverdeclared by reactTo(Test::y, Test::z) {
+        ysqrt = sqrt(y.toDouble()).toInt()
+    }
+    val updateUnderdeclared by reactTo() {
+        ysqrt = sqrt(y.toDouble()).toInt()
     }
 }
 
 fun main(args: Array<String>) {
-    var rid = 0
-    val w = Wepwawet(MapRevisionTable(), Net("player", Channel(), Channel()))
+    val w = Wepwawet(MapRevisionTable(), hashMapOf(), Net("player", Channel(), Channel()))
 
     val test1 = w.obtain(::Test)
     val test2 = w.obtain(::Test)
 
+    test1.updateSum()
+    test1.updateOverdeclared()
+    test1.updateUnderdeclared()
 
     test2.mutate(12)
 
