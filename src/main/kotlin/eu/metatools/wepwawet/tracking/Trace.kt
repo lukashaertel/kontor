@@ -3,15 +3,15 @@ package eu.metatools.wepwawet.tracking
 /**
  * A trace from call to all dependencies and the nested traces.
  */
-data class Trace<C, D, out R>(
-        val call: C,
+data class Trace<out R>(
+        val call: Call,
         val result: R,
-        val dependencies: Set<D>,
-        val nested: Set<Trace<C, D, *>>) {
+        val dependencies: Set<Dep>,
+        val nested: Set<Trace<*>>) {
     /**
      * Returns all dependencies in this trace and all nested traces
      */
-    val allDependencies: Set<D> =
+    val allDependencies: Set<Dep> =
             nested.fold(dependencies) { a, b -> a union b.allDependencies }
 
     private fun stats(indent: Int) {
