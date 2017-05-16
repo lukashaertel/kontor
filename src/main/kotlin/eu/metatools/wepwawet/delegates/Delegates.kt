@@ -3,6 +3,7 @@ package eu.metatools.wepwawet.delegates
 import eu.metatools.wepwawet.Entity
 import eu.metatools.wepwawet.tools.provideDelegate
 import kotlin.reflect.KProperty
+import kotlin.reflect.KProperty1
 
 /**
  * Provides a static value delegate, automatically registers unregistered items in the provided [Wepwawet] instance.
@@ -37,6 +38,8 @@ inline fun <R : Entity, T> R.staticOf(default: T, crossinline conf: Configurator
 @Suppress("UNUSED")
 inline fun <R : Entity, T> R.dynamic(crossinline conf: Configurator<T>) =
         provideDelegate { r: R, p: KProperty<*> ->
+            if (p !is KProperty1<*, *>)
+                throw IllegalArgumentException("Only supported for member properties")
             Dynamic<R, T>(runConfigurator(conf)).apply {
                 r.parent.registerDynamic(p, this)
                 r.parent.dynamicInit(r, p, this)

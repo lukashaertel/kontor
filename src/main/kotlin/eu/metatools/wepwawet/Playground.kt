@@ -50,10 +50,6 @@ fun main(args: Array<String>) {
     val test1 = w.obtain(::Test)
     val test2 = w.obtain(::Test)
 
-    test1.updateSum()
-    test1.updateOverdeclared()
-    test1.updateUnderdeclared()
-
     test2.mutate(12)
 
     w.time = 1

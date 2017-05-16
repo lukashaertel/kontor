@@ -37,7 +37,7 @@ Once the username is entered, the chat client is properly configured, a repeated
     }
 ```
 
-Aside from that, a second task is lauched that reads the user's input (`consoleLines`) and feeds them into the outbound messages. Once there are no lines anymore, the client is stopped.
+Aside from that, a second task is lauched that backingReads the user's input (`consoleLines`) and feeds them into the outbound messages. Once there are no lines anymore, the client is stopped.
 
 ```kotlin
     launch(CommonPool) {

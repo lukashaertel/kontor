@@ -2,7 +2,6 @@ package eu.metatools.wepwawet.net
 
 import kotlinx.coroutines.experimental.channels.ReceiveChannel
 import kotlinx.coroutines.experimental.channels.SendChannel
-import kotlin.coroutines.experimental.buildSequence
 
 /**
  * Network handler for [eu.metatools.wepwawet.Wepwawet], needs a client [identity] and an [inbound] and [outbound]
@@ -10,8 +9,8 @@ import kotlin.coroutines.experimental.buildSequence
  */
 class Net(
         val identity: Any,
-        val inbound: ReceiveChannel<WepwawetMsg>,
-        val outbound: SendChannel<WepwawetMsg>) {
+        val inbound: ReceiveChannel<NetMsg>,
+        val outbound: SendChannel<NetMsg>) {
 
     // TODO Network synchronized ranges of IDs
     private var runningId = 0
