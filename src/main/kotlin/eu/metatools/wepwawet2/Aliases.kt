@@ -59,4 +59,4 @@ typealias Args = Array<Any?>
  * Makes an argument list
  */
 @Suppress("nothing_to_inline")
-inline fun argsOf(vararg xs: Any?) = arrayOf<Any?>(*xs)
+inline fun argsOf(vararg xs: Any?) = arrayOf(*xs)

@@ -5,13 +5,13 @@ import java.util.*
 /**
  * Picks one of the values to return randomly.
  */
-fun Random.randomOf(vararg ts: Any) =
+fun <T> Random.randomOf(vararg ts: T) =
         ts[nextInt(ts.size)]
 
 /**
  * Picks one of the values to return randomly.
  */
-fun randomOf(vararg ts: Any) = Random().randomOf(*ts)
+fun <T> randomOf(vararg ts: T) = Random().randomOf(*ts)
 
 /**
  * Picks one of the function to invoke randomly.

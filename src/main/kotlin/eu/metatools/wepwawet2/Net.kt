@@ -23,6 +23,11 @@ interface Net {
     val outbound: SendChannel<Any>
 
     /**
+     * The the root identity, this should not be returned by [getAndLeaseId] and should be equal for the entire group.
+     */
+    fun getRootId(): Id
+
+    /**
      * Get and lease identity, it will become permanently unusable by other clients.
      */
     fun getAndLeaseId(): Id

@@ -18,12 +18,14 @@ class AssociateMapper(classes: Set<KClass<*>>) : Mapper {
             .associate { (i, v) -> v to i.toClassId() }
 
     private val mapCtor = classes
-            .flatMap { it.constructors.withIndex().map { (i, v) -> v to i.toCtorId() } }
-            .associate { it }
+            .flatMap { it.constructors }
+            .withIndex()
+            .associate { (i, v) -> v to i.toCtorId() }
 
     private val mapProp = classes
-            .flatMap { it.memberProperties.withIndex().map { (i, v) -> cast<KProperty1<Any, *>>(v) to i.toPropId() } }
-            .associate { it }
+            .flatMap { it.memberProperties }
+            .withIndex()
+            .associate { (i, v) -> cast<KProperty1<Any, *>>(v) to i.toPropId() }
 
     private val unmapClass = classes
             .withIndex()

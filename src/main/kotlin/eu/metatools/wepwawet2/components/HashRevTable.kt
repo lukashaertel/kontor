@@ -3,26 +3,41 @@ package eu.metatools.wepwawet2.components
 import eu.metatools.wepwawet2.PropId
 import eu.metatools.wepwawet2.Rev
 import eu.metatools.wepwawet2.RevTable
+import eu.metatools.wepwawet2.tools.forRemoving
+import java.util.*
 
 /**
- * Basic reference implementation [RevTable], not meant to provide high performance..
+ * Basic reference implementation of [RevTable], not meant to provide high performance..
  */
 class HashRevTable : RevTable {
-    private val backing = hashMapOf<Pair<PropId, Rev>, Any?>()
+    private val backing = hashMapOf<PropId, TreeMap<Rev, Any?>>()
 
-    override fun get(propId: PropId, rev: Rev): Any? {
-        return backing[propId to rev]
+    override fun keys() = backing.keys
+
+    override fun getLatest(propId: PropId, rev: Rev): Any? {
+        try {
+            return backing.getValue(propId).floorEntry(rev).value
+        } catch(ex: NullPointerException) {
+            println("NPE: $backing, $propId, $rev")
+            throw ex
+        }
     }
 
-    override fun set(propId: PropId, rev: Rev, value: Any?) {
-        backing[propId to rev] = value
+    override fun setAt(propId: PropId, rev: Rev, value: Any?) {
+        backing.getOrPut(propId, ::TreeMap).put(rev, value)
     }
 
-    override fun remove(propId: PropId, rev: Rev) {
-        backing.remove(propId to rev)
+    override fun removeAt(propId: PropId, rev: Rev) {
+        backing.getValue(propId).remove(rev)
     }
 
-    override fun contains(propId: PropId, rev: Rev): Boolean {
-        return propId to rev in backing
+    override fun getAll(propId: PropId) = backing.getValue(propId)
+
+    override fun signOff(rev: Rev) {
+        for (v in backing.values) {
+            val f = v.floorKey(rev)
+            if (f != null)
+                v.headMap(f).clear()
+        }
     }
 }

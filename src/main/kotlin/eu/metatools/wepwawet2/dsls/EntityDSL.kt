@@ -27,6 +27,15 @@ fun <R : Entity, T> R.prop(initial: T) = provideDelegate { r: R, p ->
     Prop<R, T>(propId, mutable)
 }
 
+fun <R : Entity> R.react(vararg to: KProperty1<R, *>, block: R.() -> Unit) = provideDelegate { r: R, p ->
+    error("Unsupported")
+    val depends = to.map { r.node.container.mapper.mapProp(cast(it)) }
+
+    r.node.container.registerReact(depends, { block(cast(this)) })
+
+    React(depends, block)
+}
+
 /**
  * Creates an impulse.
  */
@@ -88,6 +97,11 @@ fun <R : Entity, T1, T2, T3> R.impulse(block: R.(T1, T2, T3) -> Unit) = provideD
 }
 
 /**
+ * Gets the identity of the container's network.
+ */
+val Entity.netIdentity get() = node.container.net.identity
+
+/**
  * Gets a net safe random double.
  */
 fun Entity.random() =
@@ -104,3 +118,27 @@ fun Entity.random(range: IntRange) =
  */
 fun Entity.random(range: LongRange) =
         node.container.net.random(range)
+
+/**
+ * Creates the entity in tracked mode via the given constructor.
+ */
+fun <R : Entity> Entity.create(ctor: (Node) -> R) =
+        node.container.create(ctor)
+
+/**
+ * Creates the entity in tracked mode via the given constructor.
+ */
+fun <R : Entity, T1> Entity.create(ctor: (Node, T1) -> R, t1: T1) =
+        node.container.create(ctor, t1)
+
+/**
+ * Creates the entity in tracked mode via the given constructor.
+ */
+fun <R : Entity, T1, T2> Entity.create(ctor: (Node, T1, T2) -> R, t1: T1, t2: T2) =
+        node.container.create(ctor, t1, t2)
+
+/**
+ * Creates the entity in tracked mode via the given constructor.
+ */
+fun <R : Entity, T1, T2, T3> Entity.create(ctor: (Node, T1, T2, T3) -> R, t1: T1, t2: T2, t3: T3) =
+        node.container.create(ctor, t1, t2, t3)

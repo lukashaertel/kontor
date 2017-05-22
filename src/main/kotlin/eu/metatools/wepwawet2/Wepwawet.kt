@@ -1,18 +1,13 @@
 package eu.metatools.wepwawet2
 
 import eu.metatools.wepwawet2.components.HashRevTable
-import eu.metatools.wepwawet2.dsls.ifDebug
+import eu.metatools.wepwawet2.components.TreeRevDeque
+import eu.metatools.wepwawet2.dsls.debugOut
 import eu.metatools.wepwawet2.dsls.nonEmpty
 import eu.metatools.wepwawet2.dsls.otherwise
-import eu.metatools.wepwawet2.tools.cast
+import eu.metatools.wepwawet2.tools.*
 import eu.metatools.wepwawet2.tracker.Ctor
-import eu.metatools.wepwawet2.tracker.Read
 import eu.metatools.wepwawet2.tracker.Tracker
-import eu.metatools.wepwawet2.tracker.Write
-import kotlinx.coroutines.experimental.CommonPool
-import kotlinx.coroutines.experimental.channels.actor
-import kotlinx.coroutines.experimental.launch
-import kotlinx.coroutines.experimental.runBlocking
 import java.util.*
 
 /**
@@ -23,6 +18,8 @@ class Wepwawet(val mapper: Mapper, val net: Net) {
     private data class ResolvedCtor(val ctor: Ctor, val result: Entity)
 
     private val ctorStack = Stack<ResolvedCtor>()
+
+    private data class SignOff(val rev: Rev)
 
     /**
      * Tracker for change and impact tracking.
@@ -40,26 +37,42 @@ class Wepwawet(val mapper: Mapper, val net: Net) {
     private val impulseTable = ImpulseTable()
 
     /**
+     * Table of all registered reacts.
+     */
+    private val reactTable = ReactTable()
+
+    /**
+     * Tracking
+     */
+    private val trackingTable = TrackingTable()
+
+    /**
+     * Receive buffer
+     */
+    private val receiving = arrayListOf<CallNet>()
+
+    /**
      * The current revision value.
      */
-    var rev: Rev = 0L
+    internal var rev: Rev = 0L
 
+    /**
+     * Offers a call net to the tracking page.
+     */
+    private fun offerTracking(callNet: CallNet) {
+        trackingTable.getOrPut(callNet.rev, { arrayListOf() }).add(callNet)
+    }
+
+    /**
+     * Runs a bound constructor.
+     */
     private fun <R : Entity> create(args: Args, ctor: (Node) -> R): R {
         return ctorStack nonEmpty { (c, r) ->
-            // Get Constructor id, this is for checking in debug mode
-            val ctorId = mapper.mapCtor(cast(ctor))
-
-            // Check in debug branch for proper sequence
-            ifDebug {
-                if (ctorId != c.ctorId)
-                    error("Mismatching call sequence, expecting ${c.ctorId}, got $ctorId")
-                if (args != c.args)
-                    error("Mismatching argument sequence, expecting ${c.args}, got $args")
-            }
-
             // Return the result that has been pre-resolved
             cast<R>(r).also {
-                entityTable[c.id] = it
+                synchronized(entityTable) {
+                    entityTable[c.id] = it
+                }
             }
         } otherwise {
             // Get network safe identity
@@ -70,7 +83,9 @@ class Wepwawet(val mapper: Mapper, val net: Net) {
 
             // Construct for given entries
             ctor(Node(this, id, HashRevTable())).also {
-                entityTable[id] = it
+                synchronized(entityTable) {
+                    entityTable[id] = it
+                }
             }
         }
     }
@@ -100,85 +115,166 @@ class Wepwawet(val mapper: Mapper, val net: Net) {
             create(argsOf(t1, t2, t3)) { ctor(it, t1, t2, t3) }
 
     /**
-     * Registers an abstract impulse with an abstract precondition.
+     * Registers an abstract impulse.
      */
     internal fun registerImpulse(propId: PropId, block: Entity.(List<Any?>) -> Unit) {
         impulseTable[propId] = block
     }
 
     /**
+     * Registers an abstract react.
+     */
+    internal fun registerReact(depends: List<PropId>, block: Entity.() -> Unit) {
+        reactTable.register(depends, block)
+    }
+
+
+    private val lastImpulses = hashMapOf<PropId, Rev>()
+    /**
      * Runs a concrete impulse passing along the abstract arguments.
      */
-    internal fun runImpulse(id: Id, propId: PropId, args: List<Any?>, block: () -> Unit) {
+    internal fun runImpulse(entity: Entity, propId: PropId, args: List<Any?>, block: () -> Unit) {
+        //TODO Better behaviour for this
+        if (lastImpulses.getOrElse(propId, { Long.MIN_VALUE }) == rev) {
+            debugOut { "Skipping impulse repeat." }
+            return
+        }
+        lastImpulses[propId] = rev
 
-        // Actually this would be contained in the conceptual tracking, but since there is just one root call and the
-        // context is this very method only, it is omitted.
-        // --- tracker.rootCall(id, propId, args)
 
-        // Reset and execute block
+        // Reset tracking and run block
         tracker.reset()
         block()
 
-        // Dispatch net to net
-        dispatchImpulse(ImpulseNet(rev, id, propId, args, tracker.reads, tracker.writes, tracker.ctors))
-    }
-
-    /**
-     * An impulse dependency net.
-     */
-    data class ImpulseNet(
-            val rev: Rev,
-            val id: Id,
-            val propId: PropId,
-            val args: List<Any?>,
-            val reads: List<Read>,
-            val writes: List<Write>,
-            val ctors: List<Ctor>)
-
-    /**
-     * Dispatches an impulse to network.
-     */
-    private fun dispatchImpulse(impulseNet: ImpulseNet) {
-        // TODO Send to network
-        println("Dispatching: $impulseNet")
-
-        runBlocking {
-            net.outbound.send(impulseNet)
-            println("Dispatched")
+        // Add call net to sending buffer and insert into tracking
+        CallNet(rev, entity.node.id, propId, args, tracker.reads, tracker.writes, tracker.ctors).also {
+            offerTracking(it)
+            net.outbound.offerSafe(it)
         }
     }
 
-    fun testReceive() = runBlocking {
-        val msg = net.inbound.receiveOrNull()
-        if (msg is ImpulseNet)
-            handleImpulse(msg)
+    /**
+     * Run reacts generated from current tracker.
+     */
+    private fun runReacts() {
+        error("Unsupported")
+        val etw = tracker.writes.groupBy({ entityTable.getValue(it.id) }) { it.propId }
+        for ((e, t) in etw)
+            for (b in reactTable.find(t))
+                e.b()
+
+        // TODO: Transitive reacts
     }
 
     /**
-     * Handles incoming impulse.
+     * Runs network send operations.
      */
-    private fun handleImpulse(impulseNet: ImpulseNet) = impulseNet.apply {
-        // Resolve constructors and put results into stack
-        for (ctor in impulseNet.ctors)
-            ctorStack += ResolvedCtor(ctor, mapper.unmapCtor(ctor.ctorId).call(*ctor.args) as Entity)
+    suspend fun netSend() {
+        // TODO Testing, therefore this is commented out
+        //
+    }
 
-        // Get target entity and target impulse
-        val target = entityTable.getValue(id)
-        val block = impulseTable.getValue(propId)
+    /**
+     * Runs network receive operations.
+     */
+    suspend fun netReceive() {
+        for (m in net.inbound)
+            if (m is CallNet)
+                synchronized(receiving) {
+                    // Offer call net to the receive buffer
+                    receiving += m
+                }
+            else if (m is SignOff) {
+                // Handle sign off
+                val sor = m.rev - 250 // TODO Should be done by server
+                synchronized(trackingTable) {
+                    trackingTable.signOff(sor)
+                }
+                synchronized(entityTable) {
+                    // TODO What to synchronize
+                    entityTable.signOff(sor)
+                }
+            }
+    }
 
-        // Execute
-        tracker.reset()
-        target.block(args)
-
-        // For debug branch check same accesses
-        ifDebug {
-            if (tracker.reads != impulseNet.reads)
-                error("Mismatching reads, expecting ${impulseNet.reads}, got ${tracker.reads}")
-            if (tracker.writes != impulseNet.writes)
-                error("Mismatching writes, expecting ${impulseNet.writes}, got ${tracker.writes}")
+    /**
+     * TODO: This should be handled by net, should also run [update]
+     */
+    fun <G : Entity> start(lobby: Lobby, game: (Node, Lobby) -> G): G {
+        val id = net.getRootId()
+        // Construct for given entries
+        return game(Node(this, id, HashRevTable()), lobby).also {
+            synchronized(entityTable) {
+                entityTable[id] = it
+            }
         }
+    }
 
-        // TODO Invalidate all following impulses already executed
+    /**
+     * Updates to a new revision, executing all received call nets to that point.
+     */
+    fun update(newRev: Rev) {
+        synchronized(trackingTable) {
+            synchronized(entityTable) {
+                // Synchronize receiving, network may offer new values
+                val insert = synchronized(receiving) {
+                    // Get the initial deque from the receive buffer by removing up to the new revision.
+                    TreeRevDeque(receiving.filterRemoving { it.rev <= newRev })
+                }
+
+                // While there are inserts to do
+                while (insert.isNotEmpty()) {
+                    // Take one and execute in that time step
+                    val i = insert.poll()
+                    rev = i.rev
+
+                    // Resolve constructors and put results into stack
+                    for (ctor in i.ctors) {
+                        val cargs = Array(1 + ctor.args.size) {
+                            when (it) {
+                                0 -> Node(this, ctor.id, HashRevTable())
+                                else -> ctor.args[it]
+                            }
+                        }
+                        ctorStack += ResolvedCtor(ctor, mapper.unmapCtor(ctor.ctorId).call(*cargs) as Entity)
+                    }
+
+                    // Get target entity and target impulse
+                    val target = entityTable.getValue(i.id)
+                    val block = impulseTable.getValue(i.propId)
+
+                    // Reset tracking and run block
+                    tracker.reset()
+                    target.block(i.args)
+
+                    // Synchronize tracking, network may mutate the page
+                    // Retract invalidated calls
+                    trackingTable.tailMap(i.rev, false).values.forRemoving {
+                        // Remove all calls with invalidated dependencies, add them to the inserts
+                        for (j in it.filterRemoving { it.inSet intersects i.outSet }) {
+                            // Revoke all their writes
+                            for ((id, propId) in j.writes)
+                                entityTable.getValue(id).node.revTable.removeAt(propId, j.rev)
+                            // Revoke all their constructions
+                            for ((id) in j.ctors)
+                                entityTable.remove(id)
+
+                            // Offer for reinsert
+                            insert.offer(j)
+                        }
+
+                        // Remove lists that are now empty
+                        it.isEmpty()
+                    }
+                    // Insert into tracking
+                    offerTracking(i)
+                }
+
+                // Set new revision
+                rev = newRev
+                net.outbound.offerSafe(SignOff(rev))
+            }
+        }
     }
 
 }

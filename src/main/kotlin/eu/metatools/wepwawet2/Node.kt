@@ -12,7 +12,7 @@ data class Node(val container: Wepwawet, val id: Id, var revTable: RevTable) {
     fun setValue(propId: PropId, value: Any?) {
         // Track and set
         container.tracker.write(id, propId)
-        revTable[propId, container.rev] = value
+        revTable.setAt(propId, container.rev, value)
     }
 
     /**
@@ -20,6 +20,6 @@ data class Node(val container: Wepwawet, val id: Id, var revTable: RevTable) {
      */
     fun <T> getValue(propId: PropId): T {
         container.tracker.read(id, propId)
-        return cast(revTable[propId, container.rev])
+        return cast(revTable.getLatest(propId, container.rev))
     }
 }

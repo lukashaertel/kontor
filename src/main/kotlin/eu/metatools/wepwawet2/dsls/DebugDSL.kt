@@ -47,3 +47,8 @@ fun <T> selectDebug(debugTrue: T, debugFalse: T) =
             debugTrue
         else
             debugFalse
+
+inline fun debugOut(block: () -> Any) {
+    if (debug)
+        println(block())
+}
