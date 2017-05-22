@@ -188,6 +188,10 @@ class Wepwawet(val mapper: Mapper, val net: Net) {
      * Updates to a new revision, executing all received call nets to that point.
      */
     fun update(newRev: Rev) {
+        println("Update")
+        // TODO: There's still a bug where a call is inserted and revoked mutually
+        // I bet this whole thing needs a rework
+
         // Poll from network without blocking
         for (m in generateSequence { net.inbound.poll() })
             if (m is CallNet)

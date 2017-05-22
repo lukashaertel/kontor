@@ -42,13 +42,14 @@ class Game(override val node: Node, val lobby: Lobby) : Entity {
 fun main(args: Array<String>) = runBlocking {
     val a = AssociateMapper(Game::class, Nimbus::class)
     val n1 = DummyNet("Net 1", 0)
-    val n2 = DummyNet("Net 2", 100, n1.outbound, n1.inbound)
+    val n2 = DummyNet("Net 2", 10000, n1.outbound, n1.inbound)
 
     val w1 = Wepwawet(a, n1)
     val w2 = Wepwawet(a, n2)
 
     val l = HashLobby()
-
+    var w1s = 0
+    var w2s = 0
     val console = Any()
     // Simulate one computer
     val r1 = launch(CommonPool) {
@@ -59,14 +60,15 @@ fun main(args: Array<String>) = runBlocking {
         while (isActive) {
             w1.update(System.currentTimeMillis() - s)
             if (everyI++ == 6) {
-                game.cmd(randomOf("i", "i", "d", "d", "i","d", "d", "d",  "u", "d", "u", "r"))
+                game.cmd(randomOf("i", "i", "d", "d", "i", "d", "d", "d", "u", "d", "u", "r"))
 
                 println("W1")
                 dumpET(w1.entityTable)
-
+                w1s++
+                println("$w1s $w2s")
                 everyI = 0
             }
-            delay(25)
+            delay(10)
         }
 
     }
@@ -80,13 +82,15 @@ fun main(args: Array<String>) = runBlocking {
         while (isActive) {
             w2.update(System.currentTimeMillis() - s)
             if (everyI++ == 3) {
-                game.cmd(randomOf("i", "i", "i", "i","d", "d", "d", "d",  "u", "d", "d", "u", "r"))
+                game.cmd(randomOf("i", "i", "i", "i", "d", "d", "d", "d", "u", "d", "d", "u", "r"))
 
                 println("W2")
                 dumpET(w2.entityTable)
+                w2s++
+                println("$w1s $w2s")
                 everyI = 0
             }
-            delay(60)
+            delay(20)
         }
     }
 
