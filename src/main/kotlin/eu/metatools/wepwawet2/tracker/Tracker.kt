@@ -1,47 +1,35 @@
-package eu.metatools.wepwawet2
+package eu.metatools.wepwawet2.tracker
 
+import eu.metatools.wepwawet2.Args
+import eu.metatools.wepwawet2.CtorId
+import eu.metatools.wepwawet2.Id
+import eu.metatools.wepwawet2.PropId
 import eu.metatools.wepwawet2.tools.each
 
 /**
  * Tracker of changes.
  */
 class Tracker {
-    /**
-     * Tracks construction of classes of [classId] via constructor [ctorId], with arguments [args] and assigned the
-     * given identity [id].
-     */
-    data class Ctor(val id: Id, val ctorId: CtorId, val args: List<Any?>)
+    private val backingCtors = arrayListOf<Ctor>()
 
-    /**
-     * Read of property [propId] on entity with identity [id].
-     */
-    data class Read(val id: Id, val propId: PropId)
+    private val backingReads = arrayListOf<Read>()
 
-    /**
-     * Write of property [propId] on entity with identity [id].
-     */
-    data class Write(val id: Id, val propId: PropId)
-
-    private val backingCtors = hashSetOf<Ctor>()
-
-    private val backingReads = hashSetOf<Read>()
-
-    private val backingWrites = hashSetOf<Write>()
+    private val backingWrites = arrayListOf<Write>()
 
     /**
      * All tracked constructors since the last [reset].
      */
-    val ctors get() = backingCtors.toSet()
+    val ctors get() = backingCtors.toList()
 
     /**
      * All tracked reads since the last [reset].
      */
-    val reads get() = backingReads.toSet()
+    val reads get() = backingReads.toList()
 
     /**
      * All tracked writes since the last [reset].
      */
-    val writes get() = backingWrites.toSet()
+    val writes get() = backingWrites.toList()
 
     /**
      * Resets the tracker
@@ -53,7 +41,7 @@ class Tracker {
     /**
      * Track a constructor call.
      */
-    fun ctor(id: Id, ctorId: CtorId, args: List<Any?>) {
+    fun ctor(id: Id, ctorId: CtorId, args: Args) {
         backingCtors += Ctor(id, ctorId, args)
     }
 

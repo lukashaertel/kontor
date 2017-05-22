@@ -49,3 +49,14 @@ typealias Rev = Long
  * Casts to [Rev].
  */
 fun Number.toRev(): Rev = toLong()
+
+/**
+ * Arbitrary arguments to function calls.
+ */
+typealias Args = Array<Any?>
+
+/**
+ * Makes an argument list
+ */
+@Suppress("nothing_to_inline")
+inline fun argsOf(vararg xs: Any?) = arrayOf<Any?>(*xs)

@@ -28,66 +28,6 @@ fun <R : Entity, T> R.prop(initial: T) = provideDelegate { r: R, p ->
 }
 
 /**
- * Creates an impulse with a precondition.
- */
-@JvmName("impulse0")
-fun <R : Entity> R.impulse(pre: R.() -> Boolean, block: R.() -> Unit) = provideDelegate { r: R, p ->
-    // Get property identity from provided property
-    val propId = r.node.container.mapper.mapProp(cast(p))
-
-    // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this)) }, { pre(cast(this)) })
-
-    // Create impulse on impulse identity and given block
-    Impulse0(propId, block, pre)
-}
-
-/**
- * Creates an impulse with a precondition.
- */
-@JvmName("impulse1")
-fun <R : Entity, T1> R.impulse(pre: R.() -> Boolean, block: R.(T1) -> Unit) = provideDelegate { r: R, p ->
-    // Get property identity from provided property
-    val propId = r.node.container.mapper.mapProp(cast(p))
-
-    // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0])) }, { pre(cast(this)) })
-
-    // Create impulse on impulse identity and given block
-    Impulse1(propId, block, pre)
-}
-
-/**
- * Creates an impulse with a precondition.
- */
-@JvmName("impulse2")
-fun <R : Entity, T1, T2> R.impulse(pre: R.() -> Boolean, block: R.(T1, T2) -> Unit) = provideDelegate { r: R, p ->
-    // Get property identity from provided property
-    val propId = r.node.container.mapper.mapProp(cast(p))
-
-    // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1])) }, { pre(cast(this)) })
-
-    // Create impulse on impulse identity and given block
-    Impulse2(propId, block, pre)
-}
-
-/**
- * Creates an impulse with a precondition.
- */
-@JvmName("impulse3")
-fun <R : Entity, T1, T2, T3> R.impulse(pre: R.() -> Boolean, block: R.(T1, T2, T3) -> Unit) = provideDelegate { r: R, p ->
-    // Get property identity from provided property
-    val propId = r.node.container.mapper.mapProp(cast(p))
-
-    // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1]), cast(it[2])) }, { pre(cast(this)) })
-
-    // Create impulse on impulse identity and given block
-    Impulse3(propId, block, pre)
-}
-
-/**
  * Creates an impulse.
  */
 @JvmName("impulse0")
@@ -96,10 +36,10 @@ fun <R : Entity> R.impulse(block: R.() -> Unit) = provideDelegate { r: R, p ->
     val propId = r.node.container.mapper.mapProp(cast(p))
 
     // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this)) }, null)
+    r.node.container.registerImpulse(propId, { block(cast(this)) })
 
     // Create impulse on impulse identity and given block
-    Impulse0(propId, block, null)
+    Impulse0(propId, block)
 }
 
 /**
@@ -111,10 +51,10 @@ fun <R : Entity, T1> R.impulse(block: R.(T1) -> Unit) = provideDelegate { r: R, 
     val propId = r.node.container.mapper.mapProp(cast(p))
 
     // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0])) }, null)
+    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0])) })
 
     // Create impulse on impulse identity and given block
-    Impulse1(propId, block, null)
+    Impulse1(propId, block)
 }
 
 /**
@@ -126,10 +66,10 @@ fun <R : Entity, T1, T2> R.impulse(block: R.(T1, T2) -> Unit) = provideDelegate 
     val propId = r.node.container.mapper.mapProp(cast(p))
 
     // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1])) }, null)
+    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1])) })
 
     // Create impulse on impulse identity and given block
-    Impulse2(propId, block, null)
+    Impulse2(propId, block)
 }
 
 /**
@@ -141,10 +81,10 @@ fun <R : Entity, T1, T2, T3> R.impulse(block: R.(T1, T2, T3) -> Unit) = provideD
     val propId = r.node.container.mapper.mapProp(cast(p))
 
     // Register for external exchange
-    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1]), cast(it[2])) }, null)
+    r.node.container.registerImpulse(propId, { block(cast(this), cast(it[0]), cast(it[1]), cast(it[2])) })
 
     // Create impulse on impulse identity and given block
-    Impulse3(propId, block, null)
+    Impulse3(propId, block)
 }
 
 /**

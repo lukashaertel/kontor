@@ -8,13 +8,10 @@ import java.util.*
 /**
  * Dummy implementation of [Net], has no functionality.
  */
-class DummyNet : Net {
-    override val identity = Any()
-
-    override val inbound = Channel<Any>()
-
-    override val outbound = Channel<Any>()
-
+class DummyNet(
+        override val identity: Any = Any(),
+        override val inbound: Channel<Any> = Channel<Any>(),
+        override val outbound: Channel<Any> = Channel<Any>()) : Net {
     private val random = Random()
 
     private var runningId = 0
