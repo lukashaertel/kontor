@@ -10,9 +10,9 @@ import java.util.*
  */
 class DummyNet(
         override val identity: Any = Any(),
-         startId: Id,
-        override val inbound: Channel<Any> = Channel<Any>(),
-        override val outbound: Channel<Any> = Channel<Any>()) : Net {
+        startId: Id,
+        override val inbound: Channel<Any> = Channel<Any>(20),
+        override val outbound: Channel<Any> = Channel<Any>(20)) : Net {
     private val random = Random()
 
     private var runningId = startId

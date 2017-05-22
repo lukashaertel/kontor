@@ -22,4 +22,5 @@ data class Node(val container: Wepwawet, val id: Id, var revTable: RevTable) {
         container.tracker.read(id, propId)
         return cast(revTable.getLatest(propId, container.rev))
     }
+
 }

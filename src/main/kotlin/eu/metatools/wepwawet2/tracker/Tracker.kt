@@ -16,6 +16,8 @@ class Tracker {
 
     private val backingWrites = arrayListOf<Write>()
 
+    private val backingDtors = arrayListOf<Dtor>()
+
     /**
      * All tracked constructors since the last [reset].
      */
@@ -30,6 +32,11 @@ class Tracker {
      * All tracked writes since the last [reset].
      */
     val writes get() = backingWrites.toList()
+
+    /**
+     * All tracked destructions since the last [reset].
+     */
+    val dtors get() = backingDtors.toList()
 
     /**
      * Resets the tracker
@@ -59,5 +66,9 @@ class Tracker {
         backingWrites += Write(id, propId)
     }
 
-    override fun toString() = "Tracker(ctors=$backingCtors, reads=$backingReads, writes=$backingWrites)"
+    fun dtor(id: Id) {
+        backingDtors += Dtor(id)
+    }
+
+    override fun toString() = "Tracker(ctors=$ctors, reads=$reads, writes=$writes), dtors=$dtors)"
 }

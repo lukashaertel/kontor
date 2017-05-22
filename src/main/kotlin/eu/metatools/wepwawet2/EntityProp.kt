@@ -1,18 +1,19 @@
 package eu.metatools.wepwawet2
 
+import eu.metatools.wepwawet2.tools.cast
 import kotlin.reflect.KProperty
 
 /**
  * A property within an entity.
  */
-data class Prop<in R : Entity, T>(val propId: PropId, val mutable: Boolean) {
+data class EntityProp<in R : Entity, T : Entity>(val propId: PropId, val mutable: Boolean) {
     companion object {
-        fun <R : Entity, T> doGet(r: R, propId: PropId): T {
-            return r.node.getValue(propId)
+        fun <R : Entity, T : Entity> doGet(r: R, propId: PropId): T {
+            return cast(r.node.container.entityTable.getValue(r.node.getValue<Id>(propId)))
         }
 
-        fun <R : Entity, T> doSet(r: R, propId: PropId, t: T) {
-            r.node.setValue(propId, t)
+        fun <R : Entity, T : Entity> doSet(r: R, propId: PropId, t: T) {
+            r.node.setValue(propId, t.node.id)
         }
     }
 
