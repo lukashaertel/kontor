@@ -1,67 +1,100 @@
 package eu.metatools.wepwawet
 
-import eu.metatools.wepwawet.delegates.dynamicOf
-import eu.metatools.wepwawet.delegates.impulse
-import eu.metatools.wepwawet.delegates.reactTo
-import eu.metatools.wepwawet.components.MapRevisionTable
-import eu.metatools.wepwawet.net.Net
-import kotlinx.coroutines.experimental.channels.Channel
-import java.lang.Math.sqrt
+import eu.metatools.kontor.tools.randomOf
+import kotlinx.coroutines.experimental.*
 
+class Y(override val node: Node, x: X) : RootEntity() {
+    val x: X by prop(x)
 
-class Test(
-        override val parent: Wepwawet,
-        override val id: Int) : Entity {
-    // Statics and dynamics just need to be tracked locally
-    var y by dynamicOf(100)
+    override fun constructed() {
+        x.d++
 
-    var z by dynamicOf(2)
-
-    var sum = 0
-
-    var ysqrt = 0
-
-    // Impulses need to be transferred with their parameters
-    val otherMutate by impulse { i: Int ->
-        z -= i
+        println("Ann yang")
     }
 
-    val mutate by impulse { i: Int ->
-        y += i * z
-        otherMutate(1)
-    }
+    override fun deleting() {
+        x.d++
 
-    // Updates need to be initialized and triggered on changes
-    val updateSum by reactTo(Test::y, Test::z) {
-        sum = y + z
-    }
-
-    val updateOverdeclared by reactTo(Test::y, Test::z) {
-        ysqrt = sqrt(y.toDouble()).toInt()
-    }
-    val updateUnderdeclared by reactTo() {
-        ysqrt = sqrt(y.toDouble()).toInt()
+        println("Bye")
     }
 }
 
-fun main(args: Array<String>) {
-    val w = Wepwawet(MapRevisionTable(), hashMapOf(), Net("player", Channel(), Channel()))
+class X(override val node: Node, val lobby: Map<String, Any?>) : RootEntity() {
+    var a by prop(0)
 
-    val test1 = w.obtain(::Test)
-    val test2 = w.obtain(::Test)
+    var b by prop(0)
 
-    test2.mutate(12)
+    var c by prop(emptyList<Y>())
 
-    w.time = 1
-    w.simulateImpulse {
-        test1.y = 400
-    }
-    w.time = 2
+    var d by prop(0)
 
-
-    w.simulateImpulse {
-        test2.z = 234
+    override fun constructed() {
+        println("Constructed on $lobby")
     }
 
-    w.stats()
+    val x by impulse { i: Int ->
+        if (a >= i) {
+            b++
+            a -= i
+            println("Plop")
+            c += construct(::Y, this)
+        }
+    }
+
+
+    val y by impulse { ->
+        a++
+    }
+
+    val z by impulse { ->
+        if (c.isNotEmpty()) {
+            val x = c.first()
+            c -= x
+            delete(x)
+        }
+    }
+}
+
+fun main(args: Array<String>) = runBlocking {
+    val ls = Wepwawet.Loopback()
+
+    val mx = Mapper(setOf(X::class, Y::class))
+    // Make both games
+    val a = launchInstance(mx, ls)
+    val b = launchInstance(mx, ls)
+
+    a.join()
+    b.join()
+}
+
+private fun launchInstance(mx: Mapper, ls: Wepwawet.Loopback): Job {
+    val (up1, down1) = ls.open()
+    val a = launch(CommonPool) {
+        val r = Wepwawet(mx)
+        r.run({
+            connect(up1, down1)
+            var x = 100
+            while (isInLobby) {
+                update()
+                delay(50)
+
+                if (x % 10 == 0)
+                    send("a", randomOf("a", "b", "c"))
+
+                if (x-- == 0)
+                    accept()
+
+                println(current)
+            }
+        }) {
+            println("Starting game")
+            val x = start(::X)
+            while (true) {
+                update()
+                delay(50)
+                println(x)
+            }
+        }
+    }
+    return a
 }

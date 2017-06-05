@@ -1,159 +1,351 @@
 package eu.metatools.wepwawet
 
-import eu.metatools.wepwawet.calls.*
-import eu.metatools.wepwawet.components.EntityTable
-import eu.metatools.wepwawet.tracking.Tracker
-import eu.metatools.wepwawet.delegates.*
-import eu.metatools.wepwawet.components.RevisionTable
-import eu.metatools.wepwawet.net.Net
-import eu.metatools.wepwawet.tools.diff
-import org.funktionale.option.getOrElse
-import kotlin.reflect.KProperty
+import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.channels.Channel
+import kotlinx.coroutines.experimental.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.experimental.channels.ReceiveChannel
+import kotlinx.coroutines.experimental.channels.SendChannel
+import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.runBlocking
+import java.util.*
 
+interface Ctrl
 
-// TODO Network synchronized identities [newId]
-class Wepwawet(
-        val revisionTable: RevisionTable,
-        val entityTable: EntityTable,
-        val net: Net) {
+interface Lobby {
+    /**
+     * Gets all currently assigned values in the lobby
+     */
+    val current: Map<String, Any?>
 
-    private val tracker = Tracker()
+    /**
+     * Sends a key-value assignment
+     */
+    fun send(key: String, value: Any?)
 
-    var time: Long = 0
+    /**
+     * Accept current game status.
+     */
+    fun accept()
 
-    operator fun contains(item: Entity) = entityTable[item.id] == item
+    /**
+     * Decline current game status.
+     */
+    fun decline()
 
-    fun register(item: Entity) {
-        if (entityTable.putIfAbsent(item.id, item) != null)
-            throw IllegalStateException("$item maps to already registered identity")
-    }
+    /**
+     *
+     */
+    fun connect(send: SendChannel<Ctrl>, receive: ReceiveChannel<Ctrl>)
 
-    fun release(item: Entity) {
-        if (entityTable.remove(item.id, item))
-            net.releaseId(item.id)
-        else
-            throw IllegalStateException("$item is not registered")
-    }
+    /**
+     * Call to disconnect from a server.
+     */
+    fun disconnect()
 
-    fun <R : Entity> obtain(provider: (Wepwawet, Int) -> R) =
-            tracker.trackLet(CallInit()) {
-                provider(this, net.getAndLeaseId()).apply {
-                    register(this)
+    /**
+     * True if lobby should continue running.
+     */
+    val isInLobby: Boolean
+
+    /**
+     * Updates the lobby.
+     */
+    fun update()
+}
+
+/**
+ * The gam controller.
+ */
+interface Game {
+    /**
+     * Initializes the game with a game entity initialized on the agreed lobby value.
+     */
+    fun <T : Entity> start(game: (Node, Map<String, Any?>) -> T): T
+
+    /**
+     * Updates the game.
+     */
+    fun update()
+}
+
+/**
+ * Repo-based game engine.
+ */
+class Wepwawet(mapper: Mapper) : Repo(mapper) {
+    /**
+     * A local loopback server.
+     */
+    class Loopback {
+        /**
+         * A client connected to the loopback server.
+         */
+        private class Client {
+            /**
+             * The send channel of the client
+             */
+            val sendChannel = Channel<Ctrl>(UNLIMITED)
+
+            /**
+             * The receive channel of the client
+             */
+            val receiveChannel = Channel<Ctrl>(UNLIMITED)
+
+            /**
+             * True if client accepted.
+             */
+            var isAccepted = false
+        }
+
+        /**
+         * List of all connections.
+         */
+        private val connections = arrayListOf<Client>()
+
+        init {
+            launch(CommonPool) {
+                // While server is running
+                while (isActive) {
+                    // Handle all messages by all connections
+                    for (c in connections.toList()) {
+                        val x = c.receiveChannel.poll()
+
+                        // Distinguish message type
+                        when (x) {
+                        // Distribute a lobby value
+                            is LobbyValue ->
+                                for (c2 in connections)
+                                    c2.sendChannel.send(x)
+
+                        // Handle client accept
+                            is Accept ->
+                                c.isAccepted = true
+
+                        // Handle client decline
+                            is Decline ->
+                                c.isAccepted = true
+
+                        // Handle client disconnect
+                            is Disconnect ->
+                                connections -= c
+                        }
+                    }
+
+                    // If all connected clients accepted, start
+                    if (connections.isNotEmpty() && connections.all { it.isAccepted }) {
+                        for ((i, c) in connections.withIndex())
+                            c.sendChannel.send(Go(i.toByte()))
+                    }
                 }
             }
+        }
 
-    fun <R : Entity, T> obtain(provider: (Wepwawet, Int, T) -> R, t: T) =
-            tracker.trackLet(CallInit()) {
-                provider(this, net.getAndLeaseId(), t).apply {
-                    register(this)
-                }
+        /**
+         * Opens a uplink/downlink pair.
+         */
+        fun open(): Pair<SendChannel<Ctrl>, ReceiveChannel<Ctrl>> = Client().let {
+            connections += it
+            it.receiveChannel to it.sendChannel
+        }
+    }
+
+    /**
+     * Message for lobby accept.
+     */
+    private class Accept : Ctrl
+
+    /**
+     * Message for lobby decline.
+     */
+    private class Decline : Ctrl
+
+    /**
+     * Message for client disconnect.
+     */
+    private class Disconnect : Ctrl
+
+    /**
+     * Message for lobby value exchange.
+     */
+    private class LobbyValue(val key: String, val value: Any?) : Ctrl
+
+    /**
+     * Message for lobby to game transition.
+     */
+    private class Go(val origin: Byte) : Ctrl
+
+    /**
+     * Message for revision sign-off.
+     */
+    private class SignOff(val rev: Rev) : Ctrl
+
+    /**
+     * Message for call dispatch.
+     */
+    private class Dispatch(val rev: Rev, val call: Call) : Ctrl
+
+    /**
+     * Connection container.
+     */
+    private class Connection(val send: SendChannel<Ctrl>, val receive: ReceiveChannel<Ctrl>)
+
+    /**
+     * The current connection.
+     */
+    private var connection: Connection? = null
+
+    /**
+     * The origin identity.
+     */
+    private var origin: Byte? = null
+
+
+    /**
+     * Internal store of sign off values.
+     */
+    private val signOffs = hashMapOf<Byte, Rev>()
+
+    /**
+     * Sends the control message safely.
+     */
+    private fun sendSafe(ctrl: Ctrl) {
+        // Get connection
+        val c = connection ?: throw IllegalStateException("Trying to send without a connection.")
+
+        // Offer or run blocking send
+        if (!c.send.offer(ctrl))
+            runBlocking { c.send.send(ctrl) }
+    }
+
+    /**
+     * Receives all messages until current end is reached.
+     */
+    private fun receiveSafeAll(): List<Ctrl> {
+        // Get connection
+        val c = connection ?: throw IllegalStateException("Trying to receive without a connection.")
+
+        return generateSequence { c.receive.poll() }.toList()
+    }
+
+    override fun onRootImpulse(rev: Rev, call: Call) {
+        // Intercept root impulse and dispatch.
+        sendSafe(Dispatch(rev, call))
+    }
+
+    /**
+     * Runs the game with [pregame] as the lobby routine and [game] as the game routine.
+     */
+    fun run(pregame: suspend Lobby.() -> Unit, game: suspend Game.() -> Unit) {
+        // Create the main lobby object
+        val l = object : Lobby {
+            /**
+             * True if go signal was received
+             */
+            private var isAccepted = false
+
+            override val current = hashMapOf<String, Any?>()
+
+            override var isInLobby: Boolean = true
+
+            override fun update() {
+                for (m in receiveSafeAll())
+                    when (m) {
+                    // Set lobby value to received value
+                        is LobbyValue -> {
+                            current[m.key] = m.value
+                        }
+
+                    // Set origin to received value and deactivate the repeat lock
+                        is Go -> {
+                            origin = m.origin
+                            isInLobby = false
+                        }
+                    }
             }
 
-    fun <R : Entity, T1, T2> obtain(provider: (Wepwawet, Int, T1, T2) -> R, t1: T1, t2: T2) =
-            tracker.trackLet(CallInit()) {
-                provider(this, net.getAndLeaseId(), t1, t2).apply {
-                    register(this)
-                }
+            override fun send(key: String, value: Any?) {
+                if (!isAccepted)
+                    sendSafe(LobbyValue(key, value))
             }
 
-    // TODO Minify call stacks, a lot of var/val behaviour is local and does not need indirection
-    // TODO Constructor behaviour
-    fun <R : Entity, T> staticInit(receiver: Entity, property: KProperty<*>, static: Static<R, T>) {
-        tracker.touch(DepInit(property))
-        revisionTable.set(receiver.id, time, property, static.config.default)
-    }
+            override fun accept() {
+                isAccepted = true
+                sendSafe(Accept())
+            }
 
-    fun <R : Entity, T> dynamicInit(receiver: Entity, property: KProperty<*>, dynamic: Dynamic<R, T>) {
-        tracker.touch(DepInit(property))
-        revisionTable.set(receiver.id, time, property, dynamic.config.default)
-    }
+            override fun decline() {
+                sendSafe(Decline())
+                isAccepted = false
+            }
 
-    fun <R : Entity, T> staticGet(receiver: Entity, property: KProperty<*>, static: Static<R, T>): T {
-        tracker.touch(DepRead(property))
-        return revisionTable
-                .get(receiver.id, time, property) {
-                    @Suppress("UNCHECKED_CAST")
-                    val r = it as T; r
-                }
-                .getOrElse { error("Interpolation behaviour") }
-    }
+            override fun connect(send: SendChannel<Ctrl>, receive: ReceiveChannel<Ctrl>) {
+                connection = Connection(send, receive)
+            }
 
-    fun <R : Entity, T> dynamicGet(receiver: Entity, property: KProperty<*>, dynamic: Dynamic<R, T>): T {
-        tracker.touch(DepRead(property))
-        return revisionTable
-                .get(receiver.id, time, property) {
-                    @Suppress("UNCHECKED_CAST")
-                    val r = it as T; r
-                }
-                .getOrElse { TODO("Interpolation behaviour") }
-    }
-
-    fun <R : Entity, T> dynamicSet(receiver: Entity, property: KProperty<*>, value: T, dynamic: Dynamic<R, T>) {
-        tracker.touch(DepWrite(property))
-        revisionTable.set(receiver.id, time, property, value)
-    }
-
-
-    // TODO Put this in a nice class
-    private val fnReg = hashMapOf<KProperty<*>, Function2<*, *, Unit>>()
-
-    fun <R : Entity, T> registerStatic(property: KProperty<*>, static: Static<R, T>) {
-        //TODO()
-    }
-
-    fun <R : Entity, T> registerDynamic(property: KProperty<*>, dynamic: Dynamic<R, T>) {
-        //TODO()
-    }
-
-    fun <R : Entity> registerUpdate(property: KProperty<*>, update: Update<R>) {
-        //TODO()
-    }
-
-    fun <R : Entity, T> registerImpulse(property: KProperty<*>, impulse: Impulse<R, T>) {
-        fnReg.put(property, impulse.block)
-    }
-
-
-    fun <R : Entity, T> getImpulse(property: KProperty<*>): R.(T) -> Unit {
-        @Suppress("UNCHECKED_CAST")
-        val r = fnReg.getOrElse(property) { error("Unknown block $property") } as R.(T) -> Unit
-        return r
-    }
-
-    fun <R : Entity> updateExecute(receiver: R, property: KProperty<*>, update: Update<R>) {
-        val touched = tracker.trackIn(CallUpdate(property)) {
-            update.block(receiver)
+            override fun disconnect() {
+                sendSafe(Disconnect())
+                connection = null
+                isInLobby = false
+            }
         }
-        val reads = touched.allDependencies.filterIsInstance<DepRead>().map { it.kProperty }.toSet()
-        val (under, over) = reads diff update.depends
-        if (under.isNotEmpty())
-            throw IllegalStateException("Under-declared dependencies for ${property.name}: $under")
-        if (over.isNotEmpty())
-            println("Over-declared dependencies for ${property.name}: $over")
-    }
 
-    fun <R : Entity, T> impulseExecute(receiver: R, property: KProperty<*>, value: T, impulse: Impulse<R, T>) {
-        val touched = tracker.trackIn(CallImpulse(property)) {
-            impulse.block(receiver, value)
+        // Run the pregame
+        runBlocking { l.pregame() }
+
+        // When pregame is completed, it's map is the lobby assignment, it is then used by the game runner
+        val g = object : Game {
+            private var startedAt = System.currentTimeMillis()
+
+            override fun <T : Entity> start(game: (Node, Map<String, Any?>) -> T): T {
+                head = Rev(0, 0, 0)
+                val r = construct(game, l.current)
+                head = Rev(0, 0, origin!!)
+                sendSafe(SignOff(head))
+                return r
+            }
+
+            override fun update() {
+                update((System.currentTimeMillis() - startedAt).toInt())
+            }
+
         }
-        touched.stats()
-    }
 
-    fun simulateImpulse(block: () -> Unit) {
-        val touched = tracker.trackIn(CallSimulated()) {
-            block()
+        // Run the game
+        if (connection != null) {
+            runBlocking { g.game() }
+            sendSafe(Disconnect())
         }
-        touched.stats()
     }
 
-    fun stats() =
-            revisionTable.stats(time)
 
-    fun start(block: () -> Unit) {
-        // TODO: Lobby data, i.e., game configuration needs to be exchanged and provided to block.
-        // TODO: [block] runs as the initialization function for a synchronous start and serves as game initialization
-        // TODO: [block] does not run on late join, instead, [revisionTable] and `calls to revert` are transferred.
+    /**
+     * Updates to the next time.
+     */
+    private fun update(time: Int) {
+        // Make next revision
+        val next = Rev(time, 0, head.origin)
+
+        // Sign off will be this time
+        signOffs[head.origin] = next
+
+        // Make insert buffer
+        val inserts = TreeMap<Rev, Call>()
+
+        // Handle all incoming messages
+        for (m in receiveSafeAll())
+            when (m) {
+                is SignOff -> signOffs[m.rev.origin] = m.rev
+                is Dispatch -> inserts[m.rev] = m.call
+            }
+
+        // Insert received calls
+        insert(inserts)
+
+        // Determine sign-off cannot be empty.
+        head = signOffs.values.min()!!
+        signOff()
+
+        // Move to next revision and send own sign-off value
+        head = next
+        sendSafe(SignOff(head))
     }
-
-    fun stop() {}
 }
