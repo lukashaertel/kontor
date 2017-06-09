@@ -194,7 +194,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     /**
      * Formats the members for [toString].
      */
-    protected open fun toStringMembers() = ""
+    public open fun toStringMembers() = ""
 
     override fun toString() = toStringMembers().let {
         if (it.isNotEmpty())

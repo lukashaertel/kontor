@@ -1,15 +1,16 @@
 package eu.metatools.wepwawet
 
 import com.google.common.collect.ComparisonChain
-import com.googlecode.lanterna.graphics.TextGraphics
+import com.googlecode.lanterna.TerminalPosition
+import com.googlecode.lanterna.TextColor
+import com.googlecode.lanterna.gui2.*
+import com.googlecode.lanterna.gui2.table.Table
+import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
-import com.googlecode.lanterna.terminal.Terminal
-import eu.metatools.common.randomOf
-import eu.metatools.common.randomTrue
-import eu.metatools.common.sTerminal
-import eu.metatools.common.sText
+import eu.metatools.common.*
 import kotlinx.coroutines.experimental.*
-import java.lang.Math.round
+import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.Delegates.notNull
 
 class Y(container: Container) : Entity(container) {
@@ -27,7 +28,17 @@ class Y(container: Container) : Entity(container) {
 class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
     var children by prop(listOf<Y>())
 
+    var ct by prop(0)
+
+    val clear by impulse { ->
+        ct += 1
+        for (c in children)
+            delete(c)
+        children = listOf()
+    }
+
     val cmd by impulse { arg: String ->
+        ct += 1
         when (arg) {
             "add" -> children += create(::Y).apply {
                 i = children.size
@@ -44,7 +55,7 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
         }
     }
 
-    override fun toStringMembers() = "size=${children.size}"
+    override fun toStringMembers() = "size=${children.size}, ct=$ct"
 }
 
 fun <T> Map<List<Any>, T>.softSort() = entries.sortedWith(Comparator { xs, ys ->
@@ -64,96 +75,143 @@ fun <T> Map<List<Any>, T>.softSort() = entries.sortedWith(Comparator { xs, ys ->
 // Make synchronized access variable
 val access = Any()
 
-fun TextGraphics.playGame(terminal: Terminal, container: Container, root: Root) = launch(CommonPool) {
+var pause = false
+
+fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Panel, Job> {
     val s = System.currentTimeMillis()
 
-    var runs = 0
-    while (isActive) {
-        synchronized(access) {
-            container.apply {
-                time = (System.currentTimeMillis() - s).toInt()
-                repo.softUpper = rev()
+    var timeLabel by notNull<Label>()
+    var entityTable by notNull<Table<Any>>()
+    var cmdTable by notNull<Table<Any>>()
 
-                // Get width and height of output
-                val width = terminal.terminalSize.columns / 2
-                val height = terminal.terminalSize.rows
-                val col = container.author * width
+    val result = Panel().apply {
+        layoutManager = GridLayout(2)
+        addComponent(Label("Time"))
+        addComponent(Label("...").also { timeLabel = it })
 
-                // Get clear stirng
-                val clear = " ".repeat(width)
+        entityTable = Table<Any>("Key", "Type", "Values")
+        cmdTable = Table<Any>("Target", "Cmd")
+
+        if(container.author.rem(2)==0) {
+            addComponent(cmdTable)
+            addComponent(entityTable)
+        }
+        else{
+            addComponent(entityTable)
+            addComponent(cmdTable)
+        }
+    }
+
+    val job = launch(CommonPool) {
+        while (isActive) {
+            if (pause) {
+                yield()
+                continue
+            }
+
+            synchronized(access) {
+                container.apply {
+                    time = (System.currentTimeMillis() - s).toInt()
+                    repo.softUpper = rev()
+                    repo.drop(Revision(time - 5 * 60 * 1000, 0, 0))
 
 
-                for (i in 0..height)
-                    putString(col, i, clear)
+                    val minutes = (time / 1000 / 60).toString().padStart(2, '0')
+                    val seconds = (time / 1000).rem(60).toString().padStart(2, '0')
+                    val millis = time.rem(1000).toString().padStart(3, '0')
 
-                putString(col, 0, "Author: $author")
-                putString(col, 1, "Time: $time")
-                putString(col, 2, "FPS: ${round(1000.0 * runs / time)}")
+                    timeLabel.text = "Time: $minutes:$seconds.$millis"
 
-                for ((i, e) in index.softSort().withIndex()) {
-                    putString(col + 2, 7 + i, "${e.key}:")
-                    putString(col + 12, 7 + i, "${e.value}")
-                }
+                    gui.guiThread.invokeAndWait {
+                        entityTable.tableModel.apply {
+                            while (rowCount > 0)
+                                removeRow(0)
+                            for ((k, v) in index.softSort())
+                                addRow(k, v.javaClass.simpleName, v.toStringMembers())
 
-                if (randomTrue(.60))
-                    root.cmd(randomOf("add", "inc", "del").also {
-                        putString(col, 4, "Root: cmd($it)")
-                    })
-
-                if (randomTrue(.25))
-                    if (root.children.isNotEmpty()) {
-                        root.children.first().cmd()
-                        putString(col, 5, "First child: cmd()")
+                            while (rowCount > 20)
+                                removeRow(20)
+                        }
                     }
 
-                terminal.flush()
-            }
-        }
 
-        runs++
-        yield()
+                    cmdTable.tableModel.apply {
+                        if (randomTrue(.60))
+                            root.cmd(randomOf("add", "add", "add", "inc", "inc", "del").also {
+                                gui.guiThread.invokeAndWait {
+                                    insertRow(0, listOf("Root", "cmd($it)"))
+                                }
+                            })
+
+                        if (randomTrue(.25))
+                            if (root.children.isNotEmpty()) {
+                                root.children.first().cmd()
+                                gui.guiThread.invokeAndWait {
+                                    insertRow(0, listOf(root.children.first().toString(), "cmd()"))
+                                }
+                            }
+
+                        if (randomTrue(.0025)) {
+                            root.clear()
+                            gui.guiThread.invokeAndWait {
+                                insertRow(0, listOf("Root", "clear()"))
+                            }
+                        }
+
+                        gui.guiThread.invokeAndWait {
+                            while (rowCount > 20)
+                                removeRow(20)
+                        }
+                    }
+                }
+            }
+
+            delay(50)
+        }
     }
+    return result to job
 }
 
 fun main(args: Array<String>) = runBlocking {
-    sTerminal {
-        addResizeListener { _, _ -> clearScreen() }
-        setCursorVisible(false)
-        sText {
-            // Create the container locations
-            var x by notNull<Container>()
-            var y by notNull<Container>()
+    term {
+//TODO Some problem where game gets locked after clear
+        // Create the container locations
+        var x by notNull<Container>()
+        var y by notNull<Container>()
 
-            // Construct the containers
-            x = object : Container(0) {
-                override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                    y.receive(time, id, call, arg)
-                }
-            }
-
-            y = object : Container(1) {
-                override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                    x.receive(time, id, call, arg)
-                }
-            }
-
-            // Initialize
-            val a = x.init(::Root)
-            val b = y.init(::Root)
-
-            val j1 = playGame(this@sTerminal, x, a)
-            val j2 = playGame(this@sTerminal, y, b)
-
-            while (readInput().keyType != KeyType.Escape) {
-            }
-            println("Canceling")
-            j1.cancel()
-            j2.cancel()
-            j1.join()
-            j2.join()
-
-            while (readInput().keyType != KeyType.Escape) {
+        // Construct the containers
+        x = object : Container(0) {
+            override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
+                y.receive(time, id, call, arg)
             }
         }
+
+        y = object : Container(1) {
+            override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
+                x.receive(time, id, call, arg)
+            }
+        }
+
+        // Initialize
+        val a = x.init(::Root)
+        val b = y.init(::Root)
+        val gui = MultiWindowTextGUI(this, DefaultWindowManager(), EmptySpace(TextColor.ANSI.WHITE))
+
+        val xw = playGame(gui, x, a)
+        val yw = playGame(gui, y, b)
+        val window = BasicWindow().apply {
+            setHints(setOf(Window.Hint.FULL_SCREEN))
+            component = Panel().apply {
+                layoutManager = GridLayout(2)
+                addComponent(Button("pause") { pause = true })
+                addComponent(Button("play") { pause = false })
+                addComponent(xw.first)
+                addComponent(yw.first)
+
+            }
+        }
+        gui.addWindowAndWait(window)
+        xw.second.cancel()
+        yw.second.cancel()
     }
 }
