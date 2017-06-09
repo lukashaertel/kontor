@@ -2,7 +2,7 @@ package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
 import eu.metatools.rome.Repo
-import org.funktionale.collections.prependTo
+import java.util.*
 
 /**
  * Undo in at container level, includes entity lookup.
@@ -35,14 +35,19 @@ abstract class Container(val author: Byte) {
     /**
      * Map of primary key to entities.
      */
-    private val index = hashMapOf<List<Any>, Entity>()
+    private val indexBacking = hashMapOf<List<Any>, Entity>()
+
+    /**
+     * Gets the index of the container.
+     */
+    val index: Map<List<Any>, Entity> = Collections.unmodifiableMap(indexBacking)
 
     /**
      * Registers an entity with the index.
      */
     internal fun registerEntity(entity: Entity) {
         if (entity.hasKey())
-            if (index.put(entity.primaryKey(), entity) != null)
+            if (indexBacking.put(entity.primaryKey(), entity) != null)
                 throw IllegalStateException("Entity $entity has overlapping key.")
     }
 
@@ -51,7 +56,7 @@ abstract class Container(val author: Byte) {
      */
     internal fun unregisterEntity(entity: Entity) {
         if (entity.hasKey())
-            if (!index.remove(entity.primaryKey(), entity))
+            if (!indexBacking.remove(entity.primaryKey(), entity))
                 throw IllegalStateException("Entity $entity has internal mutation on key.")
     }
 
@@ -59,24 +64,96 @@ abstract class Container(val author: Byte) {
      * Gets the entity for the ID.
      */
     fun find(id: List<Any>) =
-            index[id]
+            indexBacking[id]
 
     /**
      * Finds all matching entities, where null entries are arbitrary.
      */
     fun match(id: List<Any?>) =
-            index.filterKeys {
+            indexBacking.filterKeys {
                 // Same size and same positions have matching values
                 id.size == it.size && (id zip it).all { (a, b) -> a == null || a == b }
             }
 
     /**
-     * Finds all matching entities, where null entries are arbitrary, including a type key.
+     * Finds all matching entities of type [T], where null entries are arbitrary. The [AutoKeyMode] will be
+     * automatically filled.
      */
-    @JvmName("matchWithTypeKey")
-    inline fun <reified T> match(id: List<Any?>): Map<List<Any>, T> =
-            match(T::class.java.simpleName prependTo id).mapValues { (_, v) -> v as T }
+    @JvmName("matchWithType")
+    inline fun <reified T : Entity> match(id: List<Any?>): Map<List<Any>, T> {
+        val result = hashMapOf<List<Any>, T>()
+        for ((k, v) in index)
+            if (v is T)
+                result.put(k, v)
 
+        // No items, return immediately
+        if (result.isEmpty())
+            return result
+
+        // Get first value and select by it's auto key mode.
+        val first = result.values.first()
+        val fullId = when (first.autoKeyMode) {
+            AutoKeyMode.NONE -> id
+            AutoKeyMode.ONLY_ONE -> listOf(T::class.java.simpleName) + id
+            AutoKeyMode.ONLY_ONE_PER_TIME -> listOf(T::class.java.simpleName, null) + id
+        }
+
+        // Remove mismatching entries
+        result.entries.iterator().apply {
+            while (hasNext()) {
+                val (itemId, _) = next()
+
+                // Same size and same positions have matching values
+                if (fullId.size != itemId.size)
+                    remove()
+                else if ((fullId zip itemId).any { (a, b) -> a != null && a != b })
+                    remove()
+            }
+        }
+
+        // Return the assignments
+        return result
+    }
+
+    /**
+     * Finds all matching entities of type [T] on revision [revision], where null entries are arbitrary. The
+     * [AutoKeyMode] will be automatically filled.
+     */
+    @JvmName("matchWithTypeAndRevision")
+    inline fun <reified T : Entity> match(revision: Revision, id: List<Any?>): Map<List<Any>, T> {
+        val result = hashMapOf<List<Any>, T>()
+        for ((k, v) in index)
+            if (v is T)
+                result.put(k, v)
+
+        // No items, return immediately
+        if (result.isEmpty())
+            return result
+
+        // Get first value and select by it's auto key mode.
+        val first = result.values.first()
+        val fullId = when (first.autoKeyMode) {
+            AutoKeyMode.NONE -> id
+            AutoKeyMode.ONLY_ONE -> listOf(T::class.java.simpleName) + id
+            AutoKeyMode.ONLY_ONE_PER_TIME -> listOf(T::class.java.simpleName, revision) + id
+        }
+
+        // Remove mismatching entries
+        result.entries.iterator().apply {
+            while (hasNext()) {
+                val (itemId, _) = next()
+
+                // Same size and same positions have matching values
+                if (fullId.size != itemId.size)
+                    remove()
+                else if ((fullId zip itemId).any { (a, b) -> a != null && a != b })
+                    remove()
+            }
+        }
+
+        // Return the assignments
+        return result
+    }
 
     /**
      * Dispatches the [call] on [id] with argument [arg].
@@ -95,8 +172,6 @@ abstract class Container(val author: Byte) {
                     // Resolve entity, if not present, don't do anything
                     val target = find(id) ?: return null
 
-                    println("Doing $call on $id")
-
                     // Otherwise execute nested action and return composed undo
                     val nestedAction = target.runAction(call, arg)
                     val nestedUndo = nestedAction.exec(time)
@@ -106,7 +181,6 @@ abstract class Container(val author: Byte) {
                 override fun undo(time: Revision, carry: ContainerUndo?) {
                     // If Exec was successful, undo
                     if (carry != null) {
-                        println("Undoing $call on $id")
                         @Suppress("unchecked_cast")
                         (carry.action as Action<Revision, Any?>).undo(time, carry.carry)
                     }

@@ -14,10 +14,48 @@ interface Action<in T, C>where T : Comparable<T> {
  */
 class Repo<T> where T : Comparable<T> {
     /**
+     * Backing for the soft upper bound.
+     */
+    private var softUpperBacking: T? = null
+
+    /**
+     * Soft upper bound, setting this will undo or exec values after or up to the new soft upper bound. Null if no
+     * soft upper bound is requested.
+     */
+    var softUpper: T?
+        get() = softUpperBacking
+        set(value) {
+            // Handle shift of soft upper bound
+            softUpperBacking.let {
+                if (it == null) {
+                    if (value == null)
+                        return
+                    else
+                        undoAll(transactions.tailMap(value, false))
+                } else {
+                    if (value == null)
+                        execAll(transactions.tailMap(it, false))
+                    else if (it == value)
+                        return
+                    else if (it < value)
+                        execAll(transactions.subMap(it, false, value, true))
+                    else if (it > value)
+                        undoAll(transactions.subMap(value, false, it, true))
+                }
+            }
+
+            // Transfer value
+            softUpperBacking = value
+        }
+
+    /**
      * Store of all transactions
      */
     private val transactions = TreeMap<T, Pair<Action<T, *>, Any?>>()
 
+    /**
+     * Undo all transactions in [items].
+     */
     private fun undoAll(items: NavigableMap<T, Pair<Action<T, *>, Any?>>) {
         items.descendingMap().entries.iterator().apply {
             while (hasNext()) {
@@ -34,6 +72,9 @@ class Repo<T> where T : Comparable<T> {
         }
     }
 
+    /**
+     * Exec all transactions in [items].
+     */
     private fun execAll(items: NavigableMap<T, Pair<Action<T, *>, Any?>>) {
         items.entries.iterator().apply {
             while (hasNext()) {
@@ -46,6 +87,9 @@ class Repo<T> where T : Comparable<T> {
         }
     }
 
+    /**
+     * Removes the action, undoing and executing all subsequent actions.
+     */
     fun remove(action: Action<T, *>, time: T): Boolean {
         // Remove the item
         val x = transactions.remove(time)
@@ -60,8 +104,21 @@ class Repo<T> where T : Comparable<T> {
             return false
         }
 
+        // Preemptive cutoff if removing after the soft upper bound
+        softUpperBacking.let {
+            if (it != null && it < time)
+                return true
+        }
+
+        // Calculate items to undo and exec
+        val items = softUpperBacking.let {
+            if (it == null)
+                transactions.tailMap(time, false)
+            else
+                transactions.subMap(time, false, it, true)
+        }
+
         // Undo all subsequent states, then undo this, then execute subsequent states
-        val items = transactions.tailMap(time, false)
         undoAll(items)
 
         // Carry is set from call itself, so the cast is safe
@@ -72,14 +129,29 @@ class Repo<T> where T : Comparable<T> {
         return true
     }
 
+    /**
+     * Adds the action, undoing and executing all subsequent actions.
+     */
     fun insert(action: Action<T, *>, time: T): Boolean {
         // Slot already occupied, return false
         if (time in transactions)
             return false
 
+        // Preemptive cutoff if inserting after the soft upper bound
+        softUpperBacking.let {
+            if (it != null && it < time)
+                return true
+        }
 
-        // Undo all subsequent states, then undo this, then execute subsequent states
-        val items = transactions.tailMap(time, false)
+        // Calculate items to undo and exec
+        val items = softUpperBacking.let {
+            if (it == null)
+                transactions.tailMap(time, false)
+            else
+                transactions.subMap(time, false, it, true)
+        }
+
+        // Undo all subsequent states, then exec this, then execute subsequent states
         undoAll(items)
 
         // Carry is set from call itself, so the cast is safe
@@ -91,10 +163,9 @@ class Repo<T> where T : Comparable<T> {
         return true
     }
 
-    fun softUpper(until: T?) {
-        TODO("Introduce soft upper bound to limit execution to time.")
-    }
-
+    /**
+     * Removes all actions until but not including the given time.
+     */
     fun drop(until: T) {
         transactions.headMap(until, false).clear()
     }

@@ -1,6 +1,7 @@
 package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
+import kotlin.reflect.KClass
 import kotlin.reflect.KMutableProperty
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
@@ -74,7 +75,8 @@ enum class AutoKeyMode {
 /**
  * An entity in [container] with [id].
  */
-abstract class Entity(val container: Container, autoKeyMode: AutoKeyMode = AutoKeyMode.ONLY_ONE) {
+abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = AutoKeyMode.ONLY_ONE) {
+
     /**
      * Local impulse table for resolution of external calls.
      */

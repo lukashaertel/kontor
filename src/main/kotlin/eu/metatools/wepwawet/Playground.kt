@@ -68,4 +68,10 @@ fun main(args: Array<String>) {
     println("-------")
     println(x.match<Y>(listOf(null)))
 
+    x.repo.softUpper = Revision(0, 1)
+    println(x.match<Y>(listOf(null)))
+
+    x.repo.softUpper = null
+    println(x.match<Y>(listOf(null)))
+
 }
