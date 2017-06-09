@@ -88,30 +88,32 @@ abstract class Container(val author: Byte) {
      * Handles an external [call] on [id] with argument [arg].
      */
     fun receive(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-        // Insert into repository
-        repo.insert(object : Action<Revision, ContainerUndo?> {
-            override fun exec(time: Revision): ContainerUndo? {
-                // Resolve entity, if not present, don't do anything
-                val target = find(id) ?: return null
+        synchronized(repo) {
+            // Insert into repository
+            repo.insert(object : Action<Revision, ContainerUndo?> {
+                override fun exec(time: Revision): ContainerUndo? {
+                    // Resolve entity, if not present, don't do anything
+                    val target = find(id) ?: return null
 
-                println("Doing $call on $id")
+                    println("Doing $call on $id")
 
-                // Otherwise execute nested action and return composed undo
-                val nestedAction = target.runAction(call, arg)
-                val nestedUndo = nestedAction.exec(time)
-                return ContainerUndo(target, nestedAction, nestedUndo)
-            }
-
-            override fun undo(time: Revision, carry: ContainerUndo?) {
-                // If Exec was successful, undo
-                if (carry != null) {
-                    println("Undoing $call on $id")
-                    @Suppress("unchecked_cast")
-                    (carry.action as Action<Revision, Any?>).undo(time, carry.carry)
+                    // Otherwise execute nested action and return composed undo
+                    val nestedAction = target.runAction(call, arg)
+                    val nestedUndo = nestedAction.exec(time)
+                    return ContainerUndo(target, nestedAction, nestedUndo)
                 }
-            }
 
-        }, time)
+                override fun undo(time: Revision, carry: ContainerUndo?) {
+                    // If Exec was successful, undo
+                    if (carry != null) {
+                        println("Undoing $call on $id")
+                        @Suppress("unchecked_cast")
+                        (carry.action as Action<Revision, Any?>).undo(time, carry.carry)
+                    }
+                }
+
+            }, time)
+        }
     }
 
     /**
