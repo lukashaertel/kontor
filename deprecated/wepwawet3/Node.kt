@@ -30,9 +30,9 @@ class Node(
     internal var to: Rev? = null
 
     /**
-     * True if the containing repository's head revision is in the lifetime of the entity.
+     * True if [rev] is in the lifetime of the entity.
      */
-    internal fun isAlive() = to.let { from <= repo.head && (it == null || repo.head < it) }
+    internal fun isAlive(rev: Rev) = to.let { from <= rev && (it == null || rev < it) }
 
     /**
      * Gets the value of [memberId] at the repository's head revision.
@@ -59,9 +59,9 @@ class Node(
     /**
      * Resets a write.
      */
-    internal fun reset(memberId: MemberId) {
+    internal fun reset(memberId: MemberId, rev: Rev) {
         // Reset access at head
-        store[memberId.memberNum.toInt()].remove(repo.head)
+        store[memberId.memberNum.toInt()].remove(rev)
     }
 
     /**
@@ -85,7 +85,11 @@ class Node(
         }
     }
 
-    override fun toString() = buildString {
+    override fun toString() = "Node(id=$id)"
+
+    fun toWideString() = toWideString(repo.head)
+
+    fun toWideString(rev: Rev) = buildString {
         append("Node(id=")
         append(id)
         appendln("):")
@@ -95,19 +99,42 @@ class Node(
 
             // Get name and entry
             val name = repo.mapper.name(memberId)
-            val entry = row.floorEntry(repo.head)
+            val entry = row.floorEntry(rev)
 
-            // Append row
-            append("  ")
-            append(name)
-            if (entry == null)
-                appendln(" has backing error")
-            else {
+            if (entry != null) {
+                // Append row
+                append("  ")
+                append(name)
                 append(" = ")
                 append(entry.value)
                 append('@')
                 appendln(entry.key)
             }
+        }
+    }
+
+    fun toRowsString() = buildString {
+        append("Node(id=")
+        append(id)
+        appendln("):")
+        for ((i, row) in store.withIndex()) {
+            // Build member ID
+            val memberId = MemberId(constructorId.classNum, i.toByte())
+
+            // Get name and entry
+            val name = repo.mapper.name(memberId)
+
+            // Append row
+            append("  ")
+            append(name)
+            append(" =")
+            for ((r, v) in row) {
+                append(' ')
+                append(r)
+                append('@')
+                append(v)
+            }
+            appendln()
         }
     }
 }

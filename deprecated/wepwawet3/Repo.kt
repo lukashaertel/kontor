@@ -1,5 +1,8 @@
 package eu.metatools.wepwawet
 
+import com.google.common.collect.Maps
+import com.google.common.hash.Hasher
+import com.google.common.hash.Hashing
 import java.util.*
 import kotlin.reflect.KFunction
 
@@ -22,9 +25,15 @@ open class Repo(val mapper: Mapper) {
     private val executedCalls = TreeMap<Rev, Pair<Call, Deps>>()
 
     /**
-     * Current revision
+     * Current revision, [runId] needs to be set accordingly if writes to state are intended, [insert] handles
+     * setting this automatically.
      */
     var head: Rev = Rev(0, 0, 0)
+
+    /**
+     * Current running ID counter.
+     */
+    var runId: Short = 0
 
     /**
      * Tracking field for entities that are operated on.
@@ -52,17 +61,6 @@ open class Repo(val mapper: Mapper) {
     private val trackDeletes = arrayListOf<Id>()
 
     /**
-     * Resets the tracking fields.
-     */
-    private fun reset() {
-        trackOperates.clear()
-        trackReads.clear()
-        trackWrites.clear()
-        trackConstructs.clear()
-        trackDeletes.clear()
-    }
-
-    /**
      * Store of impulse dispatches.
      */
     private var rootImpulse: Call? = null
@@ -71,7 +69,13 @@ open class Repo(val mapper: Mapper) {
      * Gets all current entities, read only copy.
      */
     fun headEntities() =
-            entities.filterValues { it.node.isAlive() }
+            entities.filterValues { it.node.isAlive(head) }
+
+    /**
+     * Gets all alive entities at [rev].
+     */
+    fun entitiesAt(rev: Rev) =
+            Maps.filterValues(entities) { it!!.node.isAlive(head) }
 
 
     internal fun registerErasedCall(memberId: MemberId, erased: Entity.(Any?) -> Unit) {
@@ -94,20 +98,38 @@ open class Repo(val mapper: Mapper) {
         trackWrites += id to memberId
     }
 
+//    private fun createId(): Int {
+//        val h = Hashing.goodFastHash(32).newHasher()
+//        h.putInt(head.major)
+//        h.putShort(head.minor)
+//        h.putByte(head.origin)
+//        for (i in trackOperates)
+//            h.putInt(i)
+//        for ((i, m) in trackReads)
+//            h.putInt(i).putShort(m.classNum).putByte(m.memberNum)
+//        for ((i, m) in trackWrites)
+//            h.putInt(i).putShort(m.classNum).putByte(m.memberNum)
+//        for (i in trackConstructs)
+//            h.putInt(i)
+//        for (i in trackDeletes)
+//            h.putInt(i)
+//        return h.hash().asInt()
+//    }
+
     /**
      * Handles construction of an entity.
      */
     private fun <R : Entity> runConstruct(erased: (Node) -> R, constructorId: ConstructorId, args: List<Any?>): R {
+        // TODO Why is this fuckt
+        val id = Id(head, runId++)
+
         // Create result
-        return erased(Node(this, head, head, constructorId, args)).also {
+        return erased(Node(this, id, head, constructorId, args)).also {
             // Add to entity table
-            entities[head] = it
+            entities[id] = it
 
             // Track construction
-            trackConstructs += head
-
-            // Increase minor counter
-            head = head.incMinor()
+            trackConstructs += id
 
             // Run post constructor hook
             it.constructed()
@@ -175,8 +197,11 @@ open class Repo(val mapper: Mapper) {
 
         insert(call)
 
-        if (rootImpulse == call)
+        if (rootImpulse == call) {
+            head = head.incMinor()
+            runId = 0
             rootImpulse = null
+        }
     }
 
     /**
@@ -194,20 +219,25 @@ open class Repo(val mapper: Mapper) {
         val prev = head
 
         // Shared set of invalidated calls
-        val invalidated = TreeMap<Rev, Pair<Call, Deps>>()
+        val reinsert = TreeMap<Rev, Pair<Call, Deps>>()
 
         // Recursive method to run a call in a revision, enriching the invalidated set
         tailrec fun doInsert(rev: Rev, call: Call) {
             // Set current weave revision
             head = rev
+            runId = 0
 
             // Try to find entity
             val entity = entities[call.id]
 
             // Check if exists and alive
-            if (entity != null && entity.node.isAlive()) {
+            if (entity != null && entity.node.isAlive(head)) {
                 // Reset tracking variables
-                reset()
+                trackOperates.clear()
+                trackReads.clear()
+                trackWrites.clear()
+                trackConstructs.clear()
+                trackDeletes.clear()
 
                 // Add main operand
                 trackOperates += call.id
@@ -223,23 +253,27 @@ open class Repo(val mapper: Mapper) {
                         trackConstructs.toList(),
                         trackDeletes.toList())
 
-                // Add all directly invalidated executed calls
-                for ((r, e) in executedCalls.tailMap(rev, false))
-                    if (deps invalidates e.second)
-                        invalidated[r] = e
+                // Add all newly invalidated  calls
+                executedCalls.tailMap(rev, false).filterTo(reinsert) { (_, _) ->
+                    true
+                    //deps intersects e.second
+                }
 
                 // Insert own call and dependencies
                 executedCalls[rev] = call to deps
             }
 
             // If there are remaining invalidated entries
-            if (invalidated.isNotEmpty()) {
+            if (reinsert.isNotEmpty()) {
                 // Remove and decompose first entry
-                val (r, e) = invalidated.pollFirstEntry()
+                val (r, e) = reinsert.pollFirstEntry()
                 val (c, d) = e
 
-                // Transfer time of invalidated call
-                head = r
+                // Add all originally dependent calls
+                executedCalls.tailMap(r, false).filterTo(reinsert) { (_, _) ->
+                    true
+                    //d intersects e.second
+                }
 
                 // Remove all not constructed entities
                 for (i in d.constructs)
@@ -249,9 +283,9 @@ open class Repo(val mapper: Mapper) {
                 for (i in d.deletes)
                     entities[i]?.node?.to = null
 
-                // Reset all non written accesses
+                // Reset all not written accesses
                 for ((i, m) in d.writes)
-                    entities[i]?.node?.reset(m)
+                    entities[i]?.node?.reset(m, r)
 
                 doInsert(r, c)
             }
@@ -262,6 +296,7 @@ open class Repo(val mapper: Mapper) {
 
         // Restore previous time
         head = prev
+        runId = 0
     }
 
     /**

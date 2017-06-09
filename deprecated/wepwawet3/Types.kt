@@ -1,6 +1,7 @@
 package eu.metatools.wepwawet
 
 import com.google.common.collect.ComparisonChain
+import com.google.common.hash.HashCode
 
 /**
  * Revision with internal tracking numbers and origin byte.
@@ -11,6 +12,18 @@ data class Rev(val major: Int, val minor: Short, val origin: Byte) : Comparable<
             .compare(minor, other.minor)
             .compare(origin, other.origin)
             .result()
+
+    companion object {
+        fun upperBoundOf(rev: Rev) = Rev(rev.major, Short.MAX_VALUE, Byte.MAX_VALUE)
+
+        fun lowerBoundOf(rev: Rev) = Rev(rev.major, 0, 0)
+    }
+
+    /**
+     * Sets the major version and resets the minor version.
+     */
+    fun setMajor(to: Int) =
+            copy(major = to, minor = 0)
 
     /**
      * Increases the major version and resets the minor version.
@@ -25,13 +38,26 @@ data class Rev(val major: Int, val minor: Short, val origin: Byte) : Comparable<
             copy(minor = minor.inc())
 
     override fun toString() =
-            "$major.$minor/$origin"
+            if (minor == Short.MAX_VALUE && origin == Byte.MAX_VALUE)
+                "sup $major"
+            else if (minor == 0.toShort() && origin == 0.toByte())
+                "inf $major"
+            else
+                "$major.$minor/$origin"
 }
 
 /**
  * An ID, currently substituted by revision.
  */
-typealias Id = Rev
+data class Id(val rev: Rev, val sub: Short) : Comparable<Id> {
+    override fun compareTo(other: Id) = ComparisonChain.start()
+            .compare(rev, other.rev)
+            .compare(sub, other.sub)
+            .result()
+
+    override fun toString() = "$rev#$sub"
+}
+
 
 /**
  * The identity of a constructor.
@@ -66,4 +92,11 @@ data class Deps(
      */
     infix fun invalidates(other: Deps) =
             writes.any { it in other.reads } || deletes.any { it in other.operates }
+
+    /**
+     * True if the receiver precursors [other].
+     */
+    infix fun precursors(other: Deps) =
+            writes.any { it in other.reads } || constructs.any { it in other.operates }
+
 }

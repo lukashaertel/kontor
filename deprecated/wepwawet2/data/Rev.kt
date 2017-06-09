@@ -22,6 +22,5 @@ data class Rev(
             } thenCompare {
                 resolution to other.resolution
             }
-
     override fun toString() = "$perUpdate.$perImpulse.$perCreate/$resolution"
 }

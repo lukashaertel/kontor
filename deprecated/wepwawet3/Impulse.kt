@@ -28,7 +28,6 @@ class UnitImpulse<in R : Entity> internal constructor(
 
     operator fun getValue(r: R, p: KProperty<*>): () -> Unit = { ->
         r.node.repo.impulse(Call(r.node.id, memberId, Unit))
-        r.node.repo.head = r.node.repo.head.incMinor()
     }
 }
 
@@ -47,7 +46,6 @@ class Impulse<in R : Entity, in T> internal constructor(
 
     operator fun getValue(r: R, p: KProperty<*>): (T) -> Unit = { t ->
         r.node.repo.impulse(Call(r.node.id, memberId, t))
-        r.node.repo.head = r.node.repo.head.incMinor()
     }
 }
 
@@ -66,7 +64,6 @@ class BiImpulse<in R : Entity, in T, in U> internal constructor(
 
     operator fun getValue(r: R, p: KProperty<*>): (T, U) -> Unit = { t, u ->
         r.node.repo.impulse(Call(r.node.id, memberId, Pair(t, u)))
-        r.node.repo.head = r.node.repo.head.incMinor()
     }
 }
 
@@ -85,7 +82,6 @@ class TriImpulse<in R : Entity, in T, in U, in V> internal constructor(
 
     operator fun getValue(r: R, p: KProperty<*>): (T, U, V) -> Unit = { t, u, v ->
         r.node.repo.impulse(Call(r.node.id, memberId, Triple(t, u, v)))
-        r.node.repo.head = r.node.repo.head.incMinor()
     }
 }
 

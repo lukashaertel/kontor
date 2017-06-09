@@ -65,7 +65,7 @@ interface Game {
     /**
      * Updates the game.
      */
-    fun update()
+    fun update(): Boolean
 }
 
 /**
@@ -105,15 +105,16 @@ class Wepwawet(mapper: Mapper) : Repo(mapper) {
             launch(CommonPool) {
                 // While server is running
                 while (isActive) {
+                    val cs = connections.toList()
                     // Handle all messages by all connections
-                    for (c in connections.toList()) {
+                    for (c in cs) {
                         val x = c.receiveChannel.poll()
 
                         // Distinguish message type
                         when (x) {
                         // Distribute a lobby value
                             is LobbyValue ->
-                                for (c2 in connections)
+                                for (c2 in cs)
                                     c2.sendChannel.send(x)
 
                         // Handle client accept
@@ -127,13 +128,25 @@ class Wepwawet(mapper: Mapper) : Repo(mapper) {
                         // Handle client disconnect
                             is Disconnect ->
                                 connections -= c
+
+                        // Handle runtime dispatch
+                            is SignOff, is Dispatch ->
+                                for (c2 in cs)
+                                    if (c != c2)
+                                        c2.sendChannel.send(x)
                         }
                     }
 
                     // If all connected clients accepted, start
-                    if (connections.isNotEmpty() && connections.all { it.isAccepted }) {
-                        for ((i, c) in connections.withIndex())
-                            c.sendChannel.send(Go(i.toByte()))
+                    if (cs.isNotEmpty() && cs.all { it.isAccepted }) {
+                        for (c in cs) {
+                            for (i in 0..cs.size)
+                                c.sendChannel.send(SignOff(Rev(0, 0, (i + 1).toByte())))
+                        }
+
+                        for ((i, c) in cs.withIndex()) {
+                            c.sendChannel.send(Go((i + 1).toByte()))
+                        }
                     }
                 }
             }
@@ -297,14 +310,25 @@ class Wepwawet(mapper: Mapper) : Repo(mapper) {
 
             override fun <T : Entity> start(game: (Node, Map<String, Any?>) -> T): T {
                 head = Rev(0, 0, 0)
+                runId = 0
+
                 val r = construct(game, l.current)
+
                 head = Rev(0, 0, origin!!)
-                sendSafe(SignOff(head))
+                runId = 0
+
                 return r
             }
 
-            override fun update() {
-                update((System.currentTimeMillis() - startedAt).toInt())
+            var lu: Int? = null
+            override fun update(): Boolean {
+                val nu = (System.currentTimeMillis() - startedAt).toInt() / 50 * 50
+                if (nu == lu)
+                    return false
+
+                lu = nu
+                update(nu)
+                return true
             }
 
         }
@@ -322,7 +346,10 @@ class Wepwawet(mapper: Mapper) : Repo(mapper) {
      */
     private fun update(time: Int) {
         // Make next revision
-        val next = Rev(time, 0, head.origin)
+        val next = if (head.major != time)
+            head.setMajor(time)
+        else
+            head.incMinor()
 
         // Sign off will be this time
         signOffs[head.origin] = next
@@ -341,11 +368,17 @@ class Wepwawet(mapper: Mapper) : Repo(mapper) {
         insert(inserts)
 
         // Determine sign-off cannot be empty.
+        // TODO: Sign-off causes bugs with mismatching read semantics :(
         head = signOffs.values.min()!!
+        head = head.copy(major = head.major - 1000)
+        runId = 0
+
         signOff()
 
         // Move to next revision and send own sign-off value
         head = next
+        runId = 0
+
         sendSafe(SignOff(head))
     }
 }

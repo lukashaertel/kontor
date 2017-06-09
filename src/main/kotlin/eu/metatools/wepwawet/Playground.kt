@@ -1,100 +1,71 @@
 package eu.metatools.wepwawet
 
-import eu.metatools.kontor.tools.randomOf
-import kotlinx.coroutines.experimental.*
+import kotlin.properties.Delegates.notNull
 
-class Y(override val node: Node, x: X) : RootEntity() {
-    val x: X by prop(x)
+class Y(container: Container) : Entity(container) {
+    var i by key(Int.MAX_VALUE)
 
-    override fun constructed() {
-        x.d++
+    var x by prop(0)
 
-        println("Ann yang")
+    val cmd by impulse { ->
+        x *= 2
     }
 
-    override fun deleting() {
-        x.d++
+    override fun toString() = "Y(id=${primaryKey()})[x=$x]"
+}
 
-        println("Bye")
+class Root(container: Container) : Entity(container) {
+    var children by prop(listOf<Y>())
+
+    val cmd by impulse { ->
+        children += create(::Y).apply {
+            i = children.size
+        }
+
+        for (c in children)
+            c.x += 1
     }
 }
 
-class X(override val node: Node, val lobby: Map<String, Any?>) : RootEntity() {
-    var a by prop(0)
+fun main(args: Array<String>) {
+    var x by notNull<Container>()
+    var y by notNull<Container>()
 
-    var b by prop(0)
-
-    var c by prop(emptyList<Y>())
-
-    var d by prop(0)
-
-    override fun constructed() {
-        println("Constructed on $lobby")
-    }
-
-    val x by impulse { i: Int ->
-        if (a >= i) {
-            b++
-            a -= i
-            println("Plop")
-            c += construct(::Y, this)
+    x = object : Container(1) {
+        override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
+            y.receive(time, id, call, arg)
         }
     }
 
-
-    val y by impulse { ->
-        a++
-    }
-
-    val z by impulse { ->
-        if (c.isNotEmpty()) {
-            val x = c.first()
-            c -= x
-            delete(x)
+    y = object : Container(2) {
+        override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
+            x.receive(time, id, call, arg)
         }
     }
-}
 
-fun main(args: Array<String>) = runBlocking {
-    val ls = Wepwawet.Loopback()
+    val a = x.init(::Root)
+    val b = y.init(::Root)
 
-    val mx = Mapper(setOf(X::class, Y::class))
-    // Make both games
-    val a = launchInstance(mx, ls)
-    val b = launchInstance(mx, ls)
+    b.cmd()
+    println(a.children)
+    println(b.children)
 
-    a.join()
-    b.join()
-}
 
-private fun launchInstance(mx: Mapper, ls: Wepwawet.Loopback): Job {
-    val (up1, down1) = ls.open()
-    val a = launch(CommonPool) {
-        val r = Wepwawet(mx)
-        r.run({
-            connect(up1, down1)
-            var x = 100
-            while (isInLobby) {
-                update()
-                delay(50)
+    a.cmd()
+    println(a.children)
+    println(b.children)
 
-                if (x % 10 == 0)
-                    send("a", randomOf("a", "b", "c"))
+    x.time = 1
+    a.cmd()
+    println(a.children)
+    println(b.children)
 
-                if (x-- == 0)
-                    accept()
+    y.time = 1
+    b.children[0].cmd()
+    println(a.children)
+    println(b.children)
 
-                println(current)
-            }
-        }) {
-            println("Starting game")
-            val x = start(::X)
-            while (true) {
-                update()
-                delay(50)
-                println(x)
-            }
-        }
-    }
-    return a
+    println("-------")
+    println(x.match<Y>(listOf(null)))
+
 }
