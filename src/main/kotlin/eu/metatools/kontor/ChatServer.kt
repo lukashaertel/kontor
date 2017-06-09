@@ -1,5 +1,7 @@
 package eu.metatools.kontor
 
+import eu.metatools.common.consoleLines
+import eu.metatools.common.*
 import eu.metatools.kontor.server.Connected
 import eu.metatools.kontor.server.Disconnected
 import eu.metatools.kontor.server.From

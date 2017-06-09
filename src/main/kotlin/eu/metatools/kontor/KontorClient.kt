@@ -20,6 +20,7 @@ import kotlin.reflect.KClass
 import kotlin.serialization.KSerializer
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
+import eu.metatools.common.*
 /**
  * Provides network interaction as a client. [inbound] will receive all incoming messages, [outbound] will take all
  * outgoing messages.

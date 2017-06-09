@@ -2,7 +2,6 @@ package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
 import eu.metatools.rome.Repo
-import java.util.*
 
 /**
  * Undo in at container level, includes entity lookup.
@@ -16,16 +15,90 @@ private data class ContainerUndo(
  * Exchange manager and change tracker.
  */
 abstract class Container(val author: Byte) {
+    private var subTime: Int? = null
+
+    private var subInner: Short? = null
+
+    private var subAuthor: Byte? = null
+
+    private inline fun <T> subIn(time: Int?, inner: Short?, author: Byte?, block: () -> T): T {
+        val prevSubTime = subTime
+        val prevSubInner = subInner
+        val prevSubAuthor = subAuthor
+        subTime = time
+        subInner = inner
+        subAuthor = author
+
+        val r = block()
+
+        subTime = prevSubTime
+        subInner = prevSubInner
+        subAuthor = prevSubAuthor
+        return r
+    }
+
+    /**
+     * Backing for the current insert time.
+     */
+    private var timeBacking: Int = 0
+
+    /**
+     * Backing for the inner insert time.
+     */
+    private var innerBacking: Short = 0
+
     /**
      * Current insert time.
      */
-    var time: Int = 0
+    var time
+        get() = timeBacking
+        set(value) {
+            // Get revision sub set for the time region
+            val area = repo.revisions.subSet(
+                    Revision(value, Short.MIN_VALUE, author),
+                    Revision(value, Short.MAX_VALUE, author))
+
+            if (area.isEmpty()) {
+                // If time region is empty, inner is 0
+                timeBacking = value
+                innerBacking = 0
+            } else {
+                // Select the highest inner value to append to it.
+                val last = area.mapNotNull {
+                    if (it.author == author)
+                        it.inner
+                    else
+                        null
+                }.max()
+
+                if (last == null) {
+                    // If no revision by this author, inner is 0
+                    timeBacking = value
+                    innerBacking = 0
+                } else {
+                    // Otherwise increase last inner
+                    timeBacking = value
+                    innerBacking = last.inc()
+                }
+
+            }
+        }
 
     /**
-     * Computes a new [Revision] object representing the current time and authorship.
+     * Increments the inner call counter.
+     */
+    internal fun incInner() {
+        if (innerBacking == Short.MAX_VALUE)
+            throw IllegalStateException("Maximum call number is exceeded.")
+        innerBacking++
+    }
+
+    /**
+     * Computes a new [Revision] object representing the current time and authorship (may be substituted during an
+     * execution).
      */
     fun rev() =
-            Revision(time, author)
+            Revision(subTime ?: timeBacking, subInner ?: innerBacking, subAuthor ?: author)
 
     /**
      * Repository for change rollback.
@@ -40,7 +113,7 @@ abstract class Container(val author: Byte) {
     /**
      * Gets the index of the container.
      */
-    val index: Map<List<Any>, Entity> = Collections.unmodifiableMap(indexBacking)
+    val index get() = indexBacking.toMap()
 
     /**
      * Registers an entity with the index.
@@ -94,48 +167,7 @@ abstract class Container(val author: Byte) {
         val first = result.values.first()
         val fullId = when (first.autoKeyMode) {
             AutoKeyMode.NONE -> id
-            AutoKeyMode.ONLY_ONE -> listOf(T::class.java.simpleName) + id
-            AutoKeyMode.ONLY_ONE_PER_TIME -> listOf(T::class.java.simpleName, null) + id
-        }
-
-        // Remove mismatching entries
-        result.entries.iterator().apply {
-            while (hasNext()) {
-                val (itemId, _) = next()
-
-                // Same size and same positions have matching values
-                if (fullId.size != itemId.size)
-                    remove()
-                else if ((fullId zip itemId).any { (a, b) -> a != null && a != b })
-                    remove()
-            }
-        }
-
-        // Return the assignments
-        return result
-    }
-
-    /**
-     * Finds all matching entities of type [T] on revision [revision], where null entries are arbitrary. The
-     * [AutoKeyMode] will be automatically filled.
-     */
-    @JvmName("matchWithTypeAndRevision")
-    inline fun <reified T : Entity> match(revision: Revision, id: List<Any?>): Map<List<Any>, T> {
-        val result = hashMapOf<List<Any>, T>()
-        for ((k, v) in index)
-            if (v is T)
-                result.put(k, v)
-
-        // No items, return immediately
-        if (result.isEmpty())
-            return result
-
-        // Get first value and select by it's auto key mode.
-        val first = result.values.first()
-        val fullId = when (first.autoKeyMode) {
-            AutoKeyMode.NONE -> id
-            AutoKeyMode.ONLY_ONE -> listOf(T::class.java.simpleName) + id
-            AutoKeyMode.ONLY_ONE_PER_TIME -> listOf(T::class.java.simpleName, revision) + id
+            AutoKeyMode.PER_CLASS -> listOf(T::class.java.simpleName) + id
         }
 
         // Remove mismatching entries
@@ -160,34 +192,34 @@ abstract class Container(val author: Byte) {
      */
     abstract fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?)
 
-
     /**
      * Handles an external [call] on [id] with argument [arg].
      */
     fun receive(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-        synchronized(repo) {
-            // Insert into repository
-            repo.insert(object : Action<Revision, ContainerUndo?> {
-                override fun exec(time: Revision): ContainerUndo? {
+        // Insert into repository
+        repo.insert(object : Action<Revision, ContainerUndo?> {
+            override fun exec(time: Revision): ContainerUndo? {
+                return subIn(time.time, time.inner, time.author) {
                     // Resolve entity, if not present, don't do anything
                     val target = find(id) ?: return null
 
                     // Otherwise execute nested action and return composed undo
                     val nestedAction = target.runAction(call, arg)
                     val nestedUndo = nestedAction.exec(time)
-                    return ContainerUndo(target, nestedAction, nestedUndo)
+                    ContainerUndo(target, nestedAction, nestedUndo)
                 }
+            }
 
-                override fun undo(time: Revision, carry: ContainerUndo?) {
+            override fun undo(time: Revision, carry: ContainerUndo?) {
+                subIn(time.time, time.inner, time.author) {
                     // If Exec was successful, undo
                     if (carry != null) {
                         @Suppress("unchecked_cast")
                         (carry.action as Action<Revision, Any?>).undo(time, carry.carry)
                     }
                 }
-
-            }, time)
-        }
+            }
+        }, time)
     }
 
     /**

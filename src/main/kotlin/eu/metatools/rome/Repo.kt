@@ -54,6 +54,11 @@ class Repo<T> where T : Comparable<T> {
     private val transactions = TreeMap<T, Pair<Action<T, *>, Any?>>()
 
     /**
+     * Gets all revisions that are currently in the repository.
+     */
+    val revisions get() = transactions.navigableKeySet().toSortedSet()
+
+    /**
      * Undo all transactions in [items].
      */
     private fun undoAll(items: NavigableMap<T, Pair<Action<T, *>, Any?>>) {
@@ -139,6 +144,7 @@ class Repo<T> where T : Comparable<T> {
 
         // Preemptive cutoff if inserting after the soft upper bound
         softUpperBacking.let {
+            transactions.put(time, action to null)
             if (it != null && it < time)
                 return true
         }

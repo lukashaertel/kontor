@@ -1,4 +1,4 @@
-package eu.metatools.kontor.tools
+package eu.metatools.common
 
 /**
  * Calls the block if the receiver is of type [T], otherwise does not apply the block.

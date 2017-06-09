@@ -1,4 +1,4 @@
-package eu.metatools.kontor.tools
+package eu.metatools.common
 
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.Job

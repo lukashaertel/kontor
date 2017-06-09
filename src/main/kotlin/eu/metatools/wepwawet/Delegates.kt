@@ -14,8 +14,8 @@ interface Delegate<in R, T> {
     /**
      * Sets the value.
      */
-    operator fun setValue(receiver: R, property: KProperty<*>, value: T) {
-        throw IllegalStateException("Property $property is not settable")
+    operator fun setValue(r: R, p: KProperty<*>, value: T) {
+        throw IllegalStateException("Property $p is not settable")
     }
 }
 

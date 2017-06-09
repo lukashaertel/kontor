@@ -1,7 +1,6 @@
 package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
-import kotlin.reflect.KClass
 import kotlin.reflect.KMutableProperty
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
@@ -62,20 +61,15 @@ enum class AutoKeyMode {
     NONE,
 
     /**
-     * Generate key from class name, default method.
+     * Generate key from class name.
      */
-    ONLY_ONE,
-
-    /**
-     * Generate key from class name and creation time.
-     */
-    ONLY_ONE_PER_TIME
+    PER_CLASS,
 }
 
 /**
  * An entity in [container] with [id].
  */
-abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = AutoKeyMode.ONLY_ONE) {
+abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = AutoKeyMode.PER_CLASS) {
 
     /**
      * Local impulse table for resolution of external calls.
@@ -87,14 +81,9 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
      */
     private val keys = when (autoKeyMode) {
         AutoKeyMode.NONE -> arrayListOf<() -> Any>()
-        AutoKeyMode.ONLY_ONE -> {
+        AutoKeyMode.PER_CLASS -> {
             val a = javaClass.simpleName
             arrayListOf<() -> Any>({ a })
-        }
-        AutoKeyMode.ONLY_ONE_PER_TIME -> {
-            val a = javaClass.simpleName
-            val b = container.time
-            arrayListOf<() -> Any>({ a }, { b })
         }
     }
 
@@ -203,6 +192,18 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     }
 
     /**
+     * Formats the members for [toString].
+     */
+    protected open fun toStringMembers() = ""
+
+    override fun toString() = toStringMembers().let {
+        if (it.isNotEmpty())
+            "[${javaClass.simpleName}, key=${primaryKey()}, $it]"
+        else
+            "[${javaClass.simpleName}, key=${primaryKey()}]"
+    }
+
+    /**
      * A tracking property identifying the entity.
      */
     private class Key<in R : Entity, T>(initial: T) : Delegate<R, T> {
@@ -216,21 +217,21 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
         }
 
         @Suppress("unchecked_cast")
-        override fun setValue(receiver: R, property: KProperty<*>, value: T) {
+        override fun setValue(r: R, p: KProperty<*>, value: T) {
             // Skip non-mutation
             if (value == status) return
 
             // Remove from old identity
-            receiver.container.unregisterEntity(receiver)
+            r.container.unregisterEntity(r)
 
             // Track set
-            receiver.trackSet(property as KMutableProperty1<Entity, Any?>)
+            r.trackSet(p as KMutableProperty1<Entity, Any?>)
 
             // Write status
             status = value
 
             // Add to new identity
-            receiver.container.registerEntity(receiver)
+            r.container.registerEntity(r)
         }
     }
 
@@ -259,12 +260,12 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
         }
 
         @Suppress("unchecked_cast")
-        override fun setValue(receiver: R, property: KProperty<*>, value: T) {
+        override fun setValue(r: R, p: KProperty<*>, value: T) {
             // Skip non-mutation
             if (value == status) return
 
             // Track set
-            receiver.trackSet(property as KMutableProperty1<Entity, Any?>)
+            r.trackSet(p as KMutableProperty1<Entity, Any?>)
 
             // Write status
             status = value
@@ -297,6 +298,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             else {
                 r.container.receive(r.container.rev(), key, call, Unit)
                 r.container.dispatch(r.container.rev(), key, call, Unit)
+                r.container.incInner()
             }
         }
     }
@@ -336,6 +338,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             else {
                 r.container.receive(r.container.rev(), key, call, t)
                 r.container.dispatch(r.container.rev(), key, call, t)
+                r.container.incInner()
             }
         }
     }
@@ -375,6 +378,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             else {
                 r.container.receive(r.container.rev(), key, call, t to u)
                 r.container.dispatch(r.container.rev(), key, call, t to u)
+                r.container.incInner()
             }
         }
     }
