@@ -2,8 +2,10 @@ package eu.metatools.wepwawet
 
 import com.google.common.collect.ComparisonChain
 import com.googlecode.lanterna.TerminalPosition
+import com.googlecode.lanterna.TerminalSize
 import com.googlecode.lanterna.TextColor
 import com.googlecode.lanterna.gui2.*
+import com.googlecode.lanterna.gui2.GridLayout.*
 import com.googlecode.lanterna.gui2.table.Table
 import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
@@ -89,16 +91,19 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
         addComponent(Label("Time"))
         addComponent(Label("...").also { timeLabel = it })
 
-        entityTable = Table<Any>("Key", "Type", "Values")
-        cmdTable = Table<Any>("Target", "Cmd")
-
-        if(container.author.rem(2)==0) {
-            addComponent(cmdTable)
-            addComponent(entityTable)
+        entityTable = Table<Any>("Key", "Values").apply {
+            visibleRows = 15
         }
-        else{
-            addComponent(entityTable)
-            addComponent(cmdTable)
+        cmdTable = Table<Any>("Target", "Cmd").apply {
+            visibleRows = 15
+        }
+
+        if (container.author.rem(2) == 0) {
+            addComponent(cmdTable, createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
+            addComponent(entityTable, createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
+        } else {
+            addComponent(entityTable, GridLayout.createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
+            addComponent(cmdTable, GridLayout.createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
         }
     }
 
@@ -120,17 +125,14 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
                     val seconds = (time / 1000).rem(60).toString().padStart(2, '0')
                     val millis = time.rem(1000).toString().padStart(3, '0')
 
-                    timeLabel.text = "Time: $minutes:$seconds.$millis"
+                    timeLabel.text = "$minutes:$seconds.$millis"
 
                     gui.guiThread.invokeAndWait {
                         entityTable.tableModel.apply {
                             while (rowCount > 0)
                                 removeRow(0)
                             for ((k, v) in index.softSort())
-                                addRow(k, v.javaClass.simpleName, v.toStringMembers())
-
-                            while (rowCount > 20)
-                                removeRow(20)
+                                addRow(k, v.toStringMembers())
                         }
                     }
 
@@ -147,7 +149,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
                             if (root.children.isNotEmpty()) {
                                 root.children.first().cmd()
                                 gui.guiThread.invokeAndWait {
-                                    insertRow(0, listOf(root.children.first().toString(), "cmd()"))
+                                    insertRow(0, listOf("Child#1", "cmd()"))
                                 }
                             }
 
@@ -159,8 +161,8 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
                         }
 
                         gui.guiThread.invokeAndWait {
-                            while (rowCount > 20)
-                                removeRow(20)
+                            while (rowCount > 100)
+                                removeRow(100)
                         }
                     }
                 }
@@ -174,7 +176,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
 
 fun main(args: Array<String>) = runBlocking {
     term {
-//TODO Some problem where game gets locked after clear
+        //TODO Some problem where game gets locked after clear
         // Create the container locations
         var x by notNull<Container>()
         var y by notNull<Container>()
@@ -205,8 +207,8 @@ fun main(args: Array<String>) = runBlocking {
                 layoutManager = GridLayout(2)
                 addComponent(Button("pause") { pause = true })
                 addComponent(Button("play") { pause = false })
-                addComponent(xw.first)
-                addComponent(yw.first)
+                addComponent(xw.first, createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
+                addComponent(yw.first, createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
 
             }
         }
