@@ -198,7 +198,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 }
 
 val pingMin = 30
-val pingMax = 60
+val pingMax = 100
 
 fun main(args: Array<String>) = runBlocking {
     term {
@@ -210,7 +210,7 @@ fun main(args: Array<String>) = runBlocking {
         val toX = Channel<CallComponents>(UNLIMITED)
         val toY = Channel<CallComponents>(UNLIMITED)
 
-        val randomLatency = (pingMax..pingMax).toList().toTypedArray()
+        val randomLatency = (pingMin..pingMax).toList().toTypedArray()
         // Construct the containers
         x = object : Container(0) {
             override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
