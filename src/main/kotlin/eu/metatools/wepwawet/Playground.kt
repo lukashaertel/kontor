@@ -102,24 +102,14 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
         addComponent(Label("...").also { timeLabel = it })
         addComponent(Label("APM"))
         addComponent(Label("...").also { apmLabel = it })
-
         addComponent(Label("APS"))
         addComponent(Label("...").also { apsLabel = it })
 
-        entityTable = Table<Any>("Key", "Values").apply {
-            visibleRows = 50
-        }
-        cmdTable = Table<Any>("Target", "Cmd").apply {
-            visibleRows = 50
-        }
+        entityTable = Table<Any>("Key", "Values")
+        cmdTable = Table<Any>("Target", "Cmd")
 
-        if (container.author.rem(2) == 0) {
-            addComponent(cmdTable)
-            addComponent(entityTable)
-        } else {
-            addComponent(entityTable)
-            addComponent(cmdTable)
-        }
+        addComponent(cmdTable)
+        addComponent(entityTable)
     }
 
     val job = launch(CommonPool) {
@@ -190,6 +180,10 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 }
             }
 
+            (result.parent.size.rows - 5).let {
+                entityTable.visibleRows = it
+                cmdTable.visibleRows = it
+            }
             yield()
             //delay(20)
         }
