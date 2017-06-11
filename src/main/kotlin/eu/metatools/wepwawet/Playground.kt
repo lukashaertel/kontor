@@ -35,12 +35,6 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
 
     var ct by prop(0)
 
-    val clear by impulse { ->
-        ct += 1
-        for (c in children)
-            delete(c)
-        children = listOf()
-    }
 
     val cmd by impulse { arg: String ->
         ct += 1
@@ -86,6 +80,11 @@ data class CallComponents(
         val arg: Any?
 )
 
+var allContainers by notNull<List<Container>>()
+
+val pingMin = 15
+val pingMax = 75
+
 fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallComponents>, root: Root)
         : Pair<Panel, Job> {
     val s = System.currentTimeMillis()
@@ -93,6 +92,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
     var timeLabel by notNull<Label>()
     var apmLabel by notNull<Label>()
     var apsLabel by notNull<Label>()
+    var tasLabel by notNull<Label>()
     var entityTable by notNull<Table<Any>>()
     var cmdTable by notNull<Table<Any>>()
 
@@ -104,6 +104,8 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
         addComponent(Label("...").also { apmLabel = it })
         addComponent(Label("APS"))
         addComponent(Label("...").also { apsLabel = it })
+        addComponent(Label("#TA"))
+        addComponent(Label("...").also { tasLabel = it })
 
         entityTable = Table<Any>("Key", "Values")
         cmdTable = Table<Any>("Target", "Cmd")
@@ -126,7 +128,6 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                 time = (System.currentTimeMillis() - s).toInt()
                 repo.softUpper = rev()
-                repo.drop(Revision(time - 60 * 1000, 0, 0))
 
 
                 val minutes = (time / 1000 / 60).toString().padStart(2, '0')
@@ -149,7 +150,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                 cmdTable.tableModel.apply {
                     if (randomTrue(.60))
-                        root.cmd(randomOf("add", "add", "add", "inc", "inc", "del").also {
+                        root.cmd(randomOf("add", "inc", "del").also {
                             gui.guiThread.invokeAndWait {
                                 insertRow(0, listOf("Root", "cmd($it)"))
                                 ac++
@@ -158,41 +159,41 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                     if (randomTrue(.25))
                         if (root.children.isNotEmpty()) {
-                            root.children.first().cmd()
+                            val c = randomOf(*root.children.toTypedArray())
+                            c.cmd()
                             gui.guiThread.invokeAndWait {
-                                insertRow(0, listOf("Child#1", "cmd()"))
+                                insertRow(0, listOf("${c.primaryKey()}", "cmd()"))
                                 ac++
                             }
                         }
 
-                    if (randomTrue(.0025)) {
-                        root.clear()
-                        gui.guiThread.invokeAndWait {
-                            insertRow(0, listOf("Root", "clear()"))
-                            ac++
-                        }
-                    }
 
                     gui.guiThread.invokeAndWait {
                         while (rowCount > 100)
                             removeRow(100)
                     }
                 }
+
+
+                val mr = allContainers.map(Container::rev).min()!!
+                val dr = Revision(mr.time - (pingMax * 2), 0, 0)
+                repo.drop(dr)
+
+
+                tasLabel.text = "${repo.revisions.size}"
             }
 
-            (result.parent.size.rows - 5).let {
+            (result.parent.size.rows - 6).let {
                 entityTable.visibleRows = it
                 cmdTable.visibleRows = it
             }
+
             yield()
             //delay(20)
         }
     }
     return result to job
 }
-
-val pingMin = 30
-val pingMax = 100
 
 fun main(args: Array<String>) = runBlocking {
     term {
@@ -223,6 +224,8 @@ fun main(args: Array<String>) = runBlocking {
                 }
             }
         }
+
+        allContainers = listOf(x, y)
 
         // Initialize
         val a = x.init(::Root)

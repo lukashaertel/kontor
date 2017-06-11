@@ -15,6 +15,5 @@ data class Revision(
             .compare(author, other.author)
             .result()
 
-
     override fun toString() = "$time.$inner/$author"
 }
