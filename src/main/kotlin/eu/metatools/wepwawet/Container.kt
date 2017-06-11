@@ -15,12 +15,24 @@ private data class ContainerUndo(
  * Exchange manager and change tracker.
  */
 abstract class Container(val author: Byte) {
+    /**
+     * Substitute outer time.
+     */
     private var subTime: Int? = null
 
+    /**
+     * Substitute inner time.
+     */
     private var subInner: Short? = null
 
+    /**
+     * Substitute author.
+     */
     private var subAuthor: Byte? = null
 
+    /**
+     * Run block in substituted time.
+     */
     private inline fun <T> subIn(time: Int?, inner: Short?, author: Byte?, block: () -> T): T {
         val prevSubTime = subTime
         val prevSubInner = subInner
@@ -201,12 +213,16 @@ abstract class Container(val author: Byte) {
             override fun exec(time: Revision): ContainerUndo? {
                 return subIn(time.time, time.inner, time.author) {
                     // Resolve entity, if not present, don't do anything
-                    val target = find(id) ?: return null
+                    val target = find(id)
 
-                    // Otherwise execute nested action and return composed undo
-                    val nestedAction = target.runAction(call, arg)
-                    val nestedUndo = nestedAction.exec(time)
-                    ContainerUndo(target, nestedAction, nestedUndo)
+                    if (target == null) {
+                        null
+                    } else {
+                        // Otherwise execute nested action and return composed undo
+                        val nestedAction = target.runAction(call, arg)
+                        val nestedUndo = nestedAction.exec(time)
+                        ContainerUndo(target, nestedAction, nestedUndo)
+                    }
                 }
             }
 

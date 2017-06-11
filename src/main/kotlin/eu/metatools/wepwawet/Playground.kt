@@ -91,6 +91,8 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
     val s = System.currentTimeMillis()
 
     var timeLabel by notNull<Label>()
+    var apmLabel by notNull<Label>()
+    var apsLabel by notNull<Label>()
     var entityTable by notNull<Table<Any>>()
     var cmdTable by notNull<Table<Any>>()
 
@@ -98,6 +100,11 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
         layoutManager = GridLayout(2)
         addComponent(Label("Time"))
         addComponent(Label("...").also { timeLabel = it })
+        addComponent(Label("APM"))
+        addComponent(Label("...").also { apmLabel = it })
+
+        addComponent(Label("APS"))
+        addComponent(Label("...").also { apsLabel = it })
 
         entityTable = Table<Any>("Key", "Values").apply {
             visibleRows = 50
@@ -116,6 +123,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
     }
 
     val job = launch(CommonPool) {
+        var ac = 0
         while (isActive) {
             if (pause) {
                 yield()
@@ -136,6 +144,8 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 val millis = time.rem(1000).toString().padStart(3, '0')
 
                 timeLabel.text = "$minutes:$seconds.$millis"
+                apmLabel.text = "${1000 * 60 * ac / time}"
+                apsLabel.text = "${1000 * ac / time}"
 
                 gui.guiThread.invokeAndWait {
                     entityTable.tableModel.apply {
@@ -152,6 +162,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                         root.cmd(randomOf("add", "add", "add", "inc", "inc", "del").also {
                             gui.guiThread.invokeAndWait {
                                 insertRow(0, listOf("Root", "cmd($it)"))
+                                ac++
                             }
                         })
 
@@ -160,6 +171,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                             root.children.first().cmd()
                             gui.guiThread.invokeAndWait {
                                 insertRow(0, listOf("Child#1", "cmd()"))
+                                ac++
                             }
                         }
 
@@ -167,6 +179,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                         root.clear()
                         gui.guiThread.invokeAndWait {
                             insertRow(0, listOf("Root", "clear()"))
+                            ac++
                         }
                     }
 
@@ -177,14 +190,15 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 }
             }
 
-            delay(20)
+            yield()
+            //delay(20)
         }
     }
     return result to job
 }
 
 val pingMin = 30
-val pingMax = 500
+val pingMax = 60
 
 fun main(args: Array<String>) = runBlocking {
     term {
