@@ -11,6 +11,9 @@ import com.googlecode.lanterna.input.KeyStroke
 import com.googlecode.lanterna.input.KeyType
 import eu.metatools.common.*
 import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.channels.Channel
+import kotlinx.coroutines.experimental.channels.Channel.Factory.UNLIMITED
+import kotlinx.coroutines.experimental.channels.actor
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.Delegates.notNull
@@ -74,12 +77,17 @@ fun <T> Map<List<Any>, T>.softSort() = entries.sortedWith(Comparator { xs, ys ->
 })
 
 
-// Make synchronized access variable
-val access = Any()
-
 var pause = false
 
-fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Panel, Job> {
+data class CallComponents(
+        val revision: Revision,
+        val id: List<Any>,
+        val call: Byte,
+        val arg: Any?
+)
+
+fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallComponents>, root: Root)
+        : Pair<Panel, Job> {
     val s = System.currentTimeMillis()
 
     var timeLabel by notNull<Label>()
@@ -92,18 +100,18 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
         addComponent(Label("...").also { timeLabel = it })
 
         entityTable = Table<Any>("Key", "Values").apply {
-            visibleRows = 15
+            visibleRows = 50
         }
         cmdTable = Table<Any>("Target", "Cmd").apply {
-            visibleRows = 15
+            visibleRows = 50
         }
 
         if (container.author.rem(2) == 0) {
-            addComponent(cmdTable, createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
-            addComponent(entityTable, createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
+            addComponent(cmdTable)
+            addComponent(entityTable)
         } else {
-            addComponent(entityTable, GridLayout.createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
-            addComponent(cmdTable, GridLayout.createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
+            addComponent(entityTable)
+            addComponent(cmdTable)
         }
     }
 
@@ -114,65 +122,69 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, root: Root): Pair<Pa
                 continue
             }
 
-            synchronized(access) {
-                container.apply {
-                    time = (System.currentTimeMillis() - s).toInt()
-                    repo.softUpper = rev()
-                    repo.drop(Revision(time - 5 * 60 * 1000, 0, 0))
+            container.apply {
+                for ((r, i, c, a) in generateSequence { calls.poll() })
+                    receive(r, i, c, a)
+
+                time = (System.currentTimeMillis() - s).toInt()
+                repo.softUpper = rev()
+                repo.drop(Revision(time - 60 * 1000, 0, 0))
 
 
-                    val minutes = (time / 1000 / 60).toString().padStart(2, '0')
-                    val seconds = (time / 1000).rem(60).toString().padStart(2, '0')
-                    val millis = time.rem(1000).toString().padStart(3, '0')
+                val minutes = (time / 1000 / 60).toString().padStart(2, '0')
+                val seconds = (time / 1000).rem(60).toString().padStart(2, '0')
+                val millis = time.rem(1000).toString().padStart(3, '0')
 
-                    timeLabel.text = "$minutes:$seconds.$millis"
+                timeLabel.text = "$minutes:$seconds.$millis"
 
-                    gui.guiThread.invokeAndWait {
-                        entityTable.tableModel.apply {
-                            while (rowCount > 0)
-                                removeRow(0)
-                            for ((k, v) in index.softSort())
-                                addRow(k, v.toStringMembers())
+                gui.guiThread.invokeAndWait {
+                    entityTable.tableModel.apply {
+                        while (rowCount > 0)
+                            removeRow(0)
+                        for ((k, v) in index.softSort())
+                            addRow(k, v.toStringMembers())
+                    }
+                }
+
+
+                cmdTable.tableModel.apply {
+                    if (randomTrue(.60))
+                        root.cmd(randomOf("add", "add", "add", "inc", "inc", "del").also {
+                            gui.guiThread.invokeAndWait {
+                                insertRow(0, listOf("Root", "cmd($it)"))
+                            }
+                        })
+
+                    if (randomTrue(.25))
+                        if (root.children.isNotEmpty()) {
+                            root.children.first().cmd()
+                            gui.guiThread.invokeAndWait {
+                                insertRow(0, listOf("Child#1", "cmd()"))
+                            }
+                        }
+
+                    if (randomTrue(.0025)) {
+                        root.clear()
+                        gui.guiThread.invokeAndWait {
+                            insertRow(0, listOf("Root", "clear()"))
                         }
                     }
 
-
-                    cmdTable.tableModel.apply {
-                        if (randomTrue(.60))
-                            root.cmd(randomOf("add", "add", "add", "inc", "inc", "del").also {
-                                gui.guiThread.invokeAndWait {
-                                    insertRow(0, listOf("Root", "cmd($it)"))
-                                }
-                            })
-
-                        if (randomTrue(.25))
-                            if (root.children.isNotEmpty()) {
-                                root.children.first().cmd()
-                                gui.guiThread.invokeAndWait {
-                                    insertRow(0, listOf("Child#1", "cmd()"))
-                                }
-                            }
-
-                        if (randomTrue(.0025)) {
-                            root.clear()
-                            gui.guiThread.invokeAndWait {
-                                insertRow(0, listOf("Root", "clear()"))
-                            }
-                        }
-
-                        gui.guiThread.invokeAndWait {
-                            while (rowCount > 100)
-                                removeRow(100)
-                        }
+                    gui.guiThread.invokeAndWait {
+                        while (rowCount > 100)
+                            removeRow(100)
                     }
                 }
             }
 
-            delay(50)
+            delay(20)
         }
     }
     return result to job
 }
+
+val pingMin = 30
+val pingMax = 500
 
 fun main(args: Array<String>) = runBlocking {
     term {
@@ -181,16 +193,26 @@ fun main(args: Array<String>) = runBlocking {
         var x by notNull<Container>()
         var y by notNull<Container>()
 
+        val toX = Channel<CallComponents>(UNLIMITED)
+        val toY = Channel<CallComponents>(UNLIMITED)
+
+        val randomLatency = (pingMax..pingMax).toList().toTypedArray()
         // Construct the containers
         x = object : Container(0) {
             override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                y.receive(time, id, call, arg)
+                launch(CommonPool) {
+                    delay(randomOf(*randomLatency).toLong())
+                    toY.send(CallComponents(time, id, call, arg))
+                }
             }
         }
 
         y = object : Container(1) {
             override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                x.receive(time, id, call, arg)
+                launch(CommonPool) {
+                    delay(randomOf(*randomLatency).toLong())
+                    toX.send(CallComponents(time, id, call, arg))
+                }
             }
         }
 
@@ -199,16 +221,17 @@ fun main(args: Array<String>) = runBlocking {
         val b = y.init(::Root)
         val gui = MultiWindowTextGUI(this, DefaultWindowManager(), EmptySpace(TextColor.ANSI.WHITE))
 
-        val xw = playGame(gui, x, a)
-        val yw = playGame(gui, y, b)
+
+        val xw = playGame(gui, x, toX, a)
+        val yw = playGame(gui, y, toY, b)
         val window = BasicWindow().apply {
             setHints(setOf(Window.Hint.FULL_SCREEN))
             component = Panel().apply {
                 layoutManager = GridLayout(2)
                 addComponent(Button("pause") { pause = true })
                 addComponent(Button("play") { pause = false })
-                addComponent(xw.first, createLayoutData(Alignment.BEGINNING, Alignment.BEGINNING, true, true))
-                addComponent(yw.first, createLayoutData(Alignment.END, Alignment.BEGINNING, true, true))
+                addComponent(xw.first)
+                addComponent(yw.first)
 
             }
         }

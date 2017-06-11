@@ -93,7 +93,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     internal fun hasKey() = keys.isNotEmpty()
 
     /**
-     * COmputes the current entity key.
+     * Computes the current entity key.
      */
     internal fun primaryKey() = keys.map { it() }
 
@@ -194,7 +194,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     /**
      * Formats the members for [toString].
      */
-    public open fun toStringMembers() = ""
+    open fun toStringMembers() = ""
 
     override fun toString() = toStringMembers().let {
         if (it.isNotEmpty())
