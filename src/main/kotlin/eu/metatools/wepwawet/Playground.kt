@@ -5,6 +5,7 @@ import com.googlecode.lanterna.TextColor
 import com.googlecode.lanterna.gui2.*
 import com.googlecode.lanterna.gui2.table.Table
 import eu.metatools.common.*
+import eu.metatools.wepwawet.tools.IndexFunction0
 import eu.metatools.wepwawet.tools.Recorder
 import eu.metatools.wepwawet.tools.recordFrom
 import eu.metatools.wepwawet.tools.recorder
@@ -22,8 +23,9 @@ class Y(container: Container, i: Int) : Entity(container) {
 
     var x by prop(0, xRecorder::recordFrom)
 
-    val cmd by impulse { ->
+    val cmd: IndexFunction0<Double, Unit> by impulse { ->
         x /= 2
+        cmd[0.25]()
     }
 
     override fun toStringMembers() = "i=$i, x=$x(i=${xRecorder.exin(container.time)})"
@@ -41,7 +43,9 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
     val cmd by impulse { arg: String ->
         ct += 1
         when (arg) {
-            "add" -> children += create(::Y, children.size)
+            "add" -> children += create(::Y, children.size).also {
+                it.cmd()
+            }
 
             "inc" -> for (c in children)
                 c.x += 1
@@ -159,22 +163,22 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                 cmdTable.tableModel.apply {
                     if (randomTrue(.60))
-                        root.cmd(randomOf("add", "inc", "inc", "inc", "del").also {
+                        root.cmd(randomOf("add", "add", "inc", "inc", "inc", "del").also {
                             gui.guiThread.invokeAndWait {
                                 insertRow(0, listOf("Root", "cmd($it)"))
                                 ac++
                             }
                         })
 
-                    if (randomTrue(.25))
-                        if (root.children.isNotEmpty()) {
-                            val c = randomOf(*root.children.toTypedArray())
-                            c.cmd()
-                            gui.guiThread.invokeAndWait {
-                                insertRow(0, listOf("${c.primaryKey()}", "cmd()"))
-                                ac++
-                            }
-                        }
+//                    if (randomTrue(.25))
+//                        if (root.children.isNotEmpty()) {
+//                            val c = randomOf(*root.children.toTypedArray())
+//                            c.cmd()
+//                            gui.guiThread.invokeAndWait {
+//                                insertRow(0, listOf("${c.primaryKey()}", "cmd()"))
+//                                ac++
+//                            }
+//                        }
 
 
                     gui.guiThread.invokeAndWait {
@@ -197,8 +201,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 cmdTable.visibleRows = it
             }
 
-            yield()
-            //delay(20)
+           delay(200)
         }
     }
     return result to job

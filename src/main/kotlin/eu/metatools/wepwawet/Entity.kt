@@ -438,19 +438,16 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     /**
      * Utility function for time substitution used in delayed impulses.
      */
-    private inline fun untrackedOffsetRun(time: Int, block: () -> Unit) {
-        // Store and change tracking and container time
-        val prevTracking = tracking.get()
+    private inline fun offsetRun(time: Int, block: () -> Unit) {
+        // Store and change container time
         val prevTime = container.time
-
-        tracking.set(false)
         container.time = time
 
+        // Run code
         block()
 
         // Restore
         container.time = prevTime
-        tracking.set(prevTracking)
     }
 
     /**
@@ -475,14 +472,19 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 r.container.incInner()
             }
         }, { delay ->
+            // TODO: This is troublesome cause delayed impulses called in a root impulse do not need to be dispatched.
             val ms = (delay * 1000.0).toInt()
             if (ms < 0)
                 throw IllegalArgumentException("Cannot use negative delay.")
             else if (ms == 0)
                 this()
             else
-                r.untrackedOffsetRun(r.container.time + ms) {
-                    this()
+                r.offsetRun(r.container.time + ms) {
+                    val key = r.primaryKey()
+                    r.container.receive(r.container.rev(), key, call, Unit)
+                    if (!tracking.get())
+                        r.container.dispatch(r.container.rev(), key, call, Unit)
+                    r.container.incInner()
                 }
         })
     }
@@ -532,8 +534,13 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             else if (ms == 0)
                 this(t)
             else
-                r.untrackedOffsetRun(r.container.time + ms) {
-                    this(t)
+                r.offsetRun(r.container.time + ms) {
+                    val key = r.primaryKey()
+                    val arg = r.tryToProxy(t)
+                    r.container.receive(r.container.rev(), key, call, arg)
+                    if (!tracking.get())
+                        r.container.dispatch(r.container.rev(), key, call, arg)
+                    r.container.incInner()
                 }
         })
     }
@@ -583,8 +590,13 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             else if (ms == 0)
                 this(t, u)
             else
-                r.untrackedOffsetRun(r.container.time + ms) {
-                    this(t, u)
+                r.offsetRun(r.container.time + ms) {
+                    val key = r.primaryKey()
+                    val arg = r.tryToProxy(t) to r.tryToProxy(u)
+                    r.container.receive(r.container.rev(), key, call, arg)
+                    if (!tracking.get())
+                        r.container.dispatch(r.container.rev(), key, call, arg)
+                    r.container.incInner()
                 }
         })
     }
