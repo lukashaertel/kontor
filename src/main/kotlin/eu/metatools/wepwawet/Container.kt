@@ -2,6 +2,7 @@ package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
 import eu.metatools.rome.Repo
+import java.util.*
 
 /**
  * Undo in at container level, includes entity lookup.
@@ -64,40 +65,42 @@ abstract class Container(val author: Byte) {
     private var innerBacking: Short = 0
 
     /**
+     * Calculates the next open inner revision time for the given [time].
+     */
+    internal fun openInner(time: Int): Short {
+        // Get revision sub set for the time region
+        val area = repo.revisions.subSet(
+                Revision(time, Short.MIN_VALUE, author),
+                Revision(time, Short.MAX_VALUE, author))
+
+        if (area.isEmpty())
+            return 0
+
+        // Select the highest inner value to append to it.
+        val last = area.mapNotNull {
+            if (it.author == author)
+                it.inner
+            else
+                null
+        }.max()
+
+        return last?.inc() ?: 0
+    }
+
+    /**
+     * Calculates the next open revision for the given [time].
+     */
+    internal fun openTime(time: Int) =
+            Revision(time, openInner(time), author)
+
+    /**
      * Current insert time.
      */
     var time
         get() = timeBacking
         set(value) {
-            // Get revision sub set for the time region
-            val area = repo.revisions.subSet(
-                    Revision(value, Short.MIN_VALUE, author),
-                    Revision(value, Short.MAX_VALUE, author))
-
-            if (area.isEmpty()) {
-                // If time region is empty, inner is 0
-                timeBacking = value
-                innerBacking = 0
-            } else {
-                // Select the highest inner value to append to it.
-                val last = area.mapNotNull {
-                    if (it.author == author)
-                        it.inner
-                    else
-                        null
-                }.max()
-
-                if (last == null) {
-                    // If no revision by this author, inner is 0
-                    timeBacking = value
-                    innerBacking = 0
-                } else {
-                    // Otherwise increase last inner
-                    timeBacking = value
-                    innerBacking = last.inc()
-                }
-
-            }
+            timeBacking = value
+            innerBacking = openInner(value)
         }
 
     /**
@@ -115,6 +118,7 @@ abstract class Container(val author: Byte) {
      */
     fun rev() =
             Revision(subTime ?: timeBacking, subInner ?: innerBacking, subAuthor ?: author)
+
 
     /**
      * Repository for change rollback.
@@ -212,6 +216,7 @@ abstract class Container(val author: Byte) {
      * Handles an external [call] on [id] with argument [arg].
      */
     fun receive(time: Revision, id: List<Any?>, call: Byte, arg: Any?) {
+
         // Insert into repository
         repo.insert(object : Action<Revision, ContainerUndo?> {
             override fun exec(time: Revision): ContainerUndo? {
@@ -239,6 +244,8 @@ abstract class Container(val author: Byte) {
                     }
                 }
             }
+
+            override fun toString() = "$id.$call($arg)"
         }, time)
     }
 

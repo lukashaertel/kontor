@@ -1,5 +1,6 @@
 package eu.metatools.rome
 
+import com.google.common.collect.Maps
 import java.util.*
 
 interface Action<in T, C>where T : Comparable<T> {
@@ -17,6 +18,10 @@ class Repo<T> where T : Comparable<T> {
      * Backing for the soft upper bound.
      */
     private var softUpperBacking: T? = null
+
+    private var executingBacking = false
+
+    val executing get() = executingBacking
 
     /**
      * Soft upper bound, setting this will undo or exec values after or up to the new soft upper bound. Null if no
@@ -58,10 +63,28 @@ class Repo<T> where T : Comparable<T> {
      */
     val revisions get() = transactions.navigableKeySet().toSortedSet()
 
+    val allActions get() = transactions.mapValues { (_, t) -> t.first }
+
+    val pendingActions: NavigableMap<T, Action<T, *>> get() = Maps.transformValues(Maps.filterValues(transactions) {
+        t ->
+        t?.second == null
+    }) { t ->
+        t?.first
+    }
+
+    val doneActions: NavigableMap<T, Action<T, *>> get() = Maps.transformValues(Maps.filterValues(transactions) {
+        t ->
+        t?.second != null
+    }) { t ->
+        t?.first
+    }
+
+
     /**
      * Undo all transactions in [items].
      */
     private fun undoAll(items: NavigableMap<T, Pair<Action<T, *>, Any?>>) {
+        executingBacking = true
         items.descendingMap().entries.iterator().apply {
             while (hasNext()) {
                 // Get next item
@@ -75,12 +98,14 @@ class Repo<T> where T : Comparable<T> {
                 i.setValue(i.value.first to null)
             }
         }
+        executingBacking = false
     }
 
     /**
      * Exec all transactions in [items].
      */
     private fun execAll(items: NavigableMap<T, Pair<Action<T, *>, Any?>>) {
+        executingBacking = true
         items.entries.iterator().apply {
             while (hasNext()) {
                 // Get next item
@@ -90,6 +115,7 @@ class Repo<T> where T : Comparable<T> {
                 i.setValue(i.value.first to i.value.first.exec(i.key))
             }
         }
+        executingBacking = false
     }
 
     /**
@@ -127,8 +153,10 @@ class Repo<T> where T : Comparable<T> {
         undoAll(items)
 
         // Carry is set from call itself, so the cast is safe
+        executingBacking = true
         @Suppress("unchecked_cast")
         (x.first as Action<T, Any?>).undo(time, x.second)
+        executingBacking = false
 
         execAll(items)
         return true
@@ -161,9 +189,11 @@ class Repo<T> where T : Comparable<T> {
         undoAll(items)
 
         // Carry is set from call itself, so the cast is safe
+        executingBacking = true
         @Suppress("unchecked_cast")
         val carry = action.exec(time)
         transactions.put(time, action to carry)
+        executingBacking = false
 
         execAll(items)
         return true

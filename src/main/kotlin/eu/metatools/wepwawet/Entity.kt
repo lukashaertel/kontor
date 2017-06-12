@@ -435,20 +435,6 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     protected fun <T : Entity> holdMany(initial: List<T> = listOf()) =
             holdMany(initial) { _, _ -> }
 
-    /**
-     * Utility function for time substitution used in delayed impulses.
-     */
-    private inline fun offsetRun(time: Int, block: () -> Unit) {
-        // Store and change container time
-        val prevTime = container.time
-        container.time = time
-
-        // Run code
-        block()
-
-        // Restore
-        container.time = prevTime
-    }
 
     /**
      * An impulse without arguments.
@@ -472,20 +458,18 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 r.container.incInner()
             }
         }, { delay ->
-            // TODO: This is troublesome cause delayed impulses called in a root impulse do not need to be dispatched.
-            val ms = (delay * 1000.0).toInt()
-            if (ms < 0)
-                throw IllegalArgumentException("Cannot use negative delay.")
-            else if (ms == 0)
-                this()
-            else
-                r.offsetRun(r.container.time + ms) {
-                    val key = r.primaryKey()
-                    r.container.receive(r.container.rev(), key, call, Unit)
-                    if (!tracking.get())
-                        r.container.dispatch(r.container.rev(), key, call, Unit)
-                    r.container.incInner()
-                }
+            if (tracking.get())
+                throw IllegalStateException("Cannot delay from within impulse.")
+
+            val prev = r.container.time
+            r.container.time += (delay * 1000.0).toInt()
+
+            val key = r.primaryKey()
+            r.container.receive(r.container.rev(), key, call, Unit)
+            r.container.dispatch(r.container.rev(), key, call, Unit)
+            r.container.incInner()
+
+            r.container.time = prev
         })
     }
 
@@ -528,20 +512,19 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 r.container.incInner()
             }
         }, { t, delay ->
-            val ms = (delay * 1000.0).toInt()
-            if (ms < 0)
-                throw IllegalArgumentException("Cannot use negative delay.")
-            else if (ms == 0)
-                this(t)
-            else
-                r.offsetRun(r.container.time + ms) {
-                    val key = r.primaryKey()
-                    val arg = r.tryToProxy(t)
-                    r.container.receive(r.container.rev(), key, call, arg)
-                    if (!tracking.get())
-                        r.container.dispatch(r.container.rev(), key, call, arg)
-                    r.container.incInner()
-                }
+            if (tracking.get())
+                throw IllegalStateException("Cannot delay from within impulse.")
+
+            val prev = r.container.time
+            r.container.time += (delay * 1000.0).toInt()
+
+            val key = r.primaryKey()
+            val arg = r.tryToProxy(t)
+            r.container.receive(r.container.rev(), key, call, arg)
+            r.container.dispatch(r.container.rev(), key, call, arg)
+            r.container.incInner()
+
+            r.container.time = prev
         })
     }
 
@@ -584,20 +567,19 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 r.container.incInner()
             }
         }, { t, u, delay ->
-            val ms = (delay * 1000.0).toInt()
-            if (ms < 0)
-                throw IllegalArgumentException("Cannot use negative delay.")
-            else if (ms == 0)
-                this(t, u)
-            else
-                r.offsetRun(r.container.time + ms) {
-                    val key = r.primaryKey()
-                    val arg = r.tryToProxy(t) to r.tryToProxy(u)
-                    r.container.receive(r.container.rev(), key, call, arg)
-                    if (!tracking.get())
-                        r.container.dispatch(r.container.rev(), key, call, arg)
-                    r.container.incInner()
-                }
+            if (tracking.get())
+                throw IllegalStateException("Cannot delay from within impulse.")
+
+            val prev = r.container.time
+            r.container.time += (delay * 1000.0).toInt()
+
+            val key = r.primaryKey()
+            val arg = r.tryToProxy(t) to r.tryToProxy(u)
+            r.container.receive(r.container.rev(), key, call, arg)
+            r.container.dispatch(r.container.rev(), key, call, arg)
+            r.container.incInner()
+
+            r.container.time = prev
         })
     }
 

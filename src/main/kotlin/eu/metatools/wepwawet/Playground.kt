@@ -12,6 +12,7 @@ import eu.metatools.wepwawet.tools.recorder
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.channels.Channel.Factory.UNLIMITED
+import java.lang.Math.round
 import java.util.*
 import kotlin.properties.Delegates.notNull
 
@@ -19,16 +20,15 @@ import kotlin.properties.Delegates.notNull
 class Y(container: Container, i: Int) : Entity(container) {
     var i by key(i)
 
-    val xRecorder = recorder<Float>(3000)
+    val xRecorder = recorder<Float>(5000)
 
     var x by prop(0, xRecorder::recordFrom)
 
     val cmd: IndexFunction0<Double, Unit> by impulse { ->
         x /= 2
-        cmd[0.25]()
     }
 
-    override fun toStringMembers() = "i=$i, x=$x(i=${xRecorder.exin(container.time)})"
+    override fun toStringMembers() = "i=$i, x=$x(i=${xRecorder.exin(container.time)?.round(2)})"
 }
 
 class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
@@ -44,7 +44,7 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
         ct += 1
         when (arg) {
             "add" -> children += create(::Y, children.size).also {
-                it.cmd()
+
             }
 
             "inc" -> for (c in children)
@@ -122,7 +122,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
         addComponent(Label("...").also { tasLabel = it })
 
         entityTable = Table<Any>("Key", "Values")
-        cmdTable = Table<Any>("Target", "Cmd")
+        cmdTable = Table<Any>("Pending", "When", "Action")
 
         addComponent(cmdTable)
         addComponent(entityTable)
@@ -151,6 +151,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 timeLabel.text = "$minutes:$seconds.$millis"
                 apmLabel.text = "${1000 * 60 * ac / time}"
 
+
                 gui.guiThread.invokeAndWait {
                     entityTable.tableModel.apply {
                         while (rowCount > 0)
@@ -158,40 +159,30 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                         for ((k, v) in index.softSort())
                             addRow(k, v.toStringMembers())
                     }
-                }
 
+                    cmdTable.tableModel.apply {
+                        while (rowCount > 0)
+                            removeRow(0)
 
-                cmdTable.tableModel.apply {
-                    if (randomTrue(.60))
-                        root.cmd(randomOf("add", "add", "inc", "inc", "inc", "del").also {
-                            gui.guiThread.invokeAndWait {
-                                insertRow(0, listOf("Root", "cmd($it)"))
-                                ac++
-                            }
-                        })
+                        fun whenString(r: Revision) =
+                                (round((r.time - time).toDouble() / 100.0) / 10.0).toString()
 
-//                    if (randomTrue(.25))
-//                        if (root.children.isNotEmpty()) {
-//                            val c = randomOf(*root.children.toTypedArray())
-//                            c.cmd()
-//                            gui.guiThread.invokeAndWait {
-//                                insertRow(0, listOf("${c.primaryKey()}", "cmd()"))
-//                                ac++
-//                            }
-//                        }
+                        for ((r, a) in repo.pendingActions.descendingMap())
+                            addRow("Yes", whenString(r), a.toString())
 
-
-                    gui.guiThread.invokeAndWait {
-                        while (rowCount > 100)
-                            removeRow(100)
+                        for ((r, a) in repo.doneActions.descendingMap())
+                            addRow("", whenString(r), a.toString())
                     }
                 }
 
+                if (randomTrue(.60)) {
+                    root.cmd(randomOf("add", "add", "inc", "inc", "inc", "del"))
+                    ac++
+                }
 
                 val mr = allContainers.map(Container::rev).min()!!
                 val dr = Revision(mr.time - (pingMax * 2), 0, 0)
                 repo.drop(dr)
-
 
                 tasLabel.text = "${repo.revisions.size}"
             }
@@ -201,7 +192,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
                 cmdTable.visibleRows = it
             }
 
-           delay(200)
+            delay(100)
         }
     }
     return result to job
