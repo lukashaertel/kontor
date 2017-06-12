@@ -1,4 +1,4 @@
-This project houses [[Kontor]], [[Rome]] and [[Wepwawet]].
+This project houses [Kontor](https://github.com/lukashaertel/kontor/wiki/Kontor), [Rome](https://github.com/lukashaertel/kontor/wiki/Rome) and [Wepwawet](https://github.com/lukashaertel/kontor/wiki/Wepwawet).
 
 
 ### Building
