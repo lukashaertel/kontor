@@ -18,8 +18,8 @@ import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.Delegates.notNull
 
-class Y(container: Container) : Entity(container) {
-    var i by key(Int.MAX_VALUE)
+class Y(container: Container, i: Int) : Entity(container) {
+    var i by key(i)
 
     var x by prop(0)
 
@@ -31,30 +31,24 @@ class Y(container: Container) : Entity(container) {
 }
 
 class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
-    var children by prop(listOf<Y>())
+    var children by holdMany<Y>()
 
     var ct by prop(0)
 
     val clear by impulse { ->
-        for (c in children)
-            delete(c)
         children = listOf()
     }
 
     val cmd by impulse { arg: String ->
         ct += 1
         when (arg) {
-            "add" -> children += create(::Y).apply {
-                i = children.size
-            }
+            "add" -> children += create(::Y, children.size)
 
             "inc" -> for (c in children)
                 c.x += 1
 
             "del" -> if (children.isNotEmpty()) {
-                children -= children.last().also {
-                    delete(it)
-                }
+                children -= children.last()
             }
         }
     }
@@ -62,15 +56,23 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
     override fun toStringMembers() = "size=${children.size}, ct=$ct"
 }
 
-fun <T> Map<List<Any>, T>.softSort() = entries.sortedWith(Comparator { xs, ys ->
+fun <T> Map<List<Any?>, T>.softSort() = entries.sortedWith(Comparator { xs, ys ->
     val c = ComparisonChain.start()
     c.compare(xs.key.size, ys.key.size)
     for ((x, y) in xs.key zip ys.key) {
-        val xc = x.javaClass
-        val yc = y.javaClass
-        c.compare(xc.name, yc.name)
-        if (x is Comparable<*> && y is Comparable<*>)
-            c.compare(x, y)
+        if (x == null && y == null)
+            c.compare(0, 0)
+        else if (x == null)
+            c.compare(0, 1)
+        else if (y == null)
+            c.compare(1, 0)
+        else {
+            val xc = x.javaClass
+            val yc = y.javaClass
+            c.compare(xc.name, yc.name)
+            if (x is Comparable<*> && y is Comparable<*>)
+                c.compare(x, y)
+        }
     }
     c.result()
 })
@@ -80,13 +82,14 @@ var pause = false
 
 data class CallComponents(
         val revision: Revision,
-        val id: List<Any>,
+        val id: List<Any?>,
         val call: Byte,
         val arg: Any?
 )
 
 var allContainers by notNull<List<Container>>()
 
+val simulatePing = false
 val pingMin = 15
 val pingMax = 75
 
@@ -110,7 +113,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
             root.clear()
         })
         addComponent(Button("Clear in 3 seconds") {
-            root.clear[3000]()
+            root.clear[3.0]()
         })
         addComponent(Label("#TA"))
         addComponent(Label("...").also { tasLabel = it })
@@ -214,20 +217,30 @@ fun main(args: Array<String>) = runBlocking {
         val randomLatency = (pingMin..pingMax).toList().toTypedArray()
         // Construct the containers
         x = object : Container(0) {
-            override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                launch(CommonPool) {
-                    delay(randomOf(*randomLatency).toLong())
-                    toY.send(CallComponents(time, id, call, arg))
-                }
+            override fun dispatch(time: Revision, id: List<Any?>, call: Byte, arg: Any?) {
+                if (simulatePing)
+                    launch(CommonPool) {
+                        delay(randomOf(*randomLatency).toLong())
+                        toY.send(CallComponents(time, id, call, arg))
+                    }
+                else
+                    runBlocking {
+                        toY.send(CallComponents(time, id, call, arg))
+                    }
             }
         }
 
         y = object : Container(1) {
-            override fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
-                launch(CommonPool) {
-                    delay(randomOf(*randomLatency).toLong())
-                    toX.send(CallComponents(time, id, call, arg))
-                }
+            override fun dispatch(time: Revision, id: List<Any?>, call: Byte, arg: Any?) {
+                if (simulatePing)
+                    launch(CommonPool) {
+                        delay(randomOf(*randomLatency).toLong())
+                        toX.send(CallComponents(time, id, call, arg))
+                    }
+                else
+                    runBlocking {
+                        toX.send(CallComponents(time, id, call, arg))
+                    }
             }
         }
 

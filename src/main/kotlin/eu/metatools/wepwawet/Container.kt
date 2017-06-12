@@ -15,6 +15,10 @@ private data class ContainerUndo(
  * Exchange manager and change tracker.
  */
 abstract class Container(val author: Byte) {
+    companion object {
+        val MATCH_ANY = Any()
+    }
+
     /**
      * Substitute outer time.
      */
@@ -120,7 +124,7 @@ abstract class Container(val author: Byte) {
     /**
      * Map of primary key to entities.
      */
-    private val indexBacking = hashMapOf<List<Any>, Entity>()
+    private val indexBacking = hashMapOf<List<Any?>, Entity>()
 
     /**
      * Gets the index of the container.
@@ -148,25 +152,25 @@ abstract class Container(val author: Byte) {
     /**
      * Gets the entity for the ID.
      */
-    fun find(id: List<Any>) =
+    fun find(id: List<Any?>) =
             indexBacking[id]
 
     /**
-     * Finds all matching entities, where null entries are arbitrary.
+     * Finds all matching entities, where [MATCH_ANY] entries are arbitrary.
      */
     fun match(id: List<Any?>) =
             indexBacking.filterKeys {
                 // Same size and same positions have matching values
-                id.size == it.size && (id zip it).all { (a, b) -> a == null || a == b }
+                id.size == it.size && (id zip it).all { (a, b) -> a === MATCH_ANY || a == b }
             }
 
     /**
-     * Finds all matching entities of type [T], where null entries are arbitrary. The [AutoKeyMode] will be
+     * Finds all matching entities of type [T], where [MATCH_ANY] entries are arbitrary. The [AutoKeyMode] will be
      * automatically filled.
      */
     @JvmName("matchWithType")
-    inline fun <reified T : Entity> match(id: List<Any?>): Map<List<Any>, T> {
-        val result = hashMapOf<List<Any>, T>()
+    inline fun <reified T : Entity> match(id: List<Any?>): Map<List<Any?>, T> {
+        val result = hashMapOf<List<Any?>, T>()
         for ((k, v) in index)
             if (v is T)
                 result.put(k, v)
@@ -190,7 +194,7 @@ abstract class Container(val author: Byte) {
                 // Same size and same positions have matching values
                 if (fullId.size != itemId.size)
                     remove()
-                else if ((fullId zip itemId).any { (a, b) -> a != null && a != b })
+                else if ((fullId zip itemId).any { (a, b) -> a !== MATCH_ANY && a != b })
                     remove()
             }
         }
@@ -202,12 +206,12 @@ abstract class Container(val author: Byte) {
     /**
      * Dispatches the [call] on [id] with argument [arg].
      */
-    abstract fun dispatch(time: Revision, id: List<Any>, call: Byte, arg: Any?)
+    abstract fun dispatch(time: Revision, id: List<Any?>, call: Byte, arg: Any?)
 
     /**
      * Handles an external [call] on [id] with argument [arg].
      */
-    fun receive(time: Revision, id: List<Any>, call: Byte, arg: Any?) {
+    fun receive(time: Revision, id: List<Any?>, call: Byte, arg: Any?) {
         // Insert into repository
         repo.insert(object : Action<Revision, ContainerUndo?> {
             override fun exec(time: Revision): ContainerUndo? {
