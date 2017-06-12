@@ -1,33 +1,32 @@
 package eu.metatools.wepwawet
 
 import com.google.common.collect.ComparisonChain
-import com.googlecode.lanterna.TerminalPosition
-import com.googlecode.lanterna.TerminalSize
 import com.googlecode.lanterna.TextColor
 import com.googlecode.lanterna.gui2.*
-import com.googlecode.lanterna.gui2.GridLayout.*
 import com.googlecode.lanterna.gui2.table.Table
-import com.googlecode.lanterna.input.KeyStroke
-import com.googlecode.lanterna.input.KeyType
 import eu.metatools.common.*
+import eu.metatools.wepwawet.tools.Recorder
+import eu.metatools.wepwawet.tools.recordFrom
+import eu.metatools.wepwawet.tools.recorder
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.channels.Channel.Factory.UNLIMITED
-import kotlinx.coroutines.experimental.channels.actor
 import java.util.*
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.properties.Delegates.notNull
+
 
 class Y(container: Container, i: Int) : Entity(container) {
     var i by key(i)
 
-    var x by prop(0)
+    val xRecorder = recorder<Float>(3000)
+
+    var x by prop(0, xRecorder::recordFrom)
 
     val cmd by impulse { ->
         x /= 2
     }
 
-    override fun toStringMembers() = "i=$i, x=$x"
+    override fun toStringMembers() = "i=$i, x=$x(i=${xRecorder.exin(container.time)})"
 }
 
 class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {

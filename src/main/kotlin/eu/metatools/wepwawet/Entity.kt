@@ -161,7 +161,7 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     }
 
     /**
-     * Creates an entity with the given construcotor and the given id.
+     * Creates an entity with the given constructor and registers it with the container.
      */
     protected fun <E : Entity> create(constructor: (Container) -> E): E {
         // Validate call location
@@ -179,9 +179,15 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
         return e
     }
 
+    /**
+     * Creates an entity with the given constructor and registers it with the container.
+     */
     protected fun <E : Entity, T> create(constructor: (Container, T) -> E, t: T) =
             create { constructor(it, t) }
 
+    /**
+     * Creates an entity with the given constructor and registers it with the container.
+     */
     protected fun <E : Entity, T, U> create(constructor: (Container, T, U) -> E, t: T, u: U) =
             create { constructor(it, t, u) }
 
@@ -342,6 +348,12 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             Property(initial, delta)
 
     /**
+     * Creates a tracking property with a delta reactor.
+     */
+    protected fun <T> prop(initial: T, new: (T) -> Unit): Delegate<Entity, T> =
+            prop(initial) { _, y -> new(y) }
+
+    /**
      * Creates a tracking property.
      */
     protected fun <T> prop(initial: T) =
@@ -364,6 +376,13 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
      * Creates a single entity container that can be nullable. On value change, non-contained entities will be
      * removed. When not given explicitly, the property will be initialized with null.
      */
+    protected fun <T : Entity> holdOptional(initial: T? = null, new: (T?) -> Unit) =
+            holdOptional(initial) { _, y -> new(y) }
+
+    /**
+     * Creates a single entity container that can be nullable. On value change, non-contained entities will be
+     * removed. When not given explicitly, the property will be initialized with null.
+     */
     protected fun <T : Entity> holdOptional(initial: T? = null) =
             holdOptional(initial) { _, _ -> }
 
@@ -376,6 +395,12 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 if (!undoing.get())
                     delete(x)
             }
+
+    /**
+     * Creates a single entity container. On value change, non-contained entities will be removed.
+     */
+    protected fun <T : Entity> holdOne(initial: T, new: (T) -> Unit) =
+            holdOne(initial) { _, y -> new(y) }
 
     /**
      * Creates a single entity container. On value change, non-contained entities will be removed.
@@ -396,6 +421,17 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                             delete(x)
             }
 
+    /**
+     * Creates a many object container. On value change, non-contained entities will be removed. When not given
+     * explicitly, the property will be initialized with an empty list.
+     */
+    protected fun <T : Entity> holdMany(initial: List<T> = listOf(), new: (List<T>) -> Unit) =
+            holdMany(initial) { _, y -> new(y) }
+
+    /**
+     * Creates a many object container. On value change, non-contained entities will be removed. When not given
+     * explicitly, the property will be initialized with an empty list.
+     */
     protected fun <T : Entity> holdMany(initial: List<T> = listOf()) =
             holdMany(initial) { _, _ -> }
 
