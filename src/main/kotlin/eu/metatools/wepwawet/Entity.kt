@@ -1,6 +1,10 @@
 package eu.metatools.wepwawet
 
 import eu.metatools.rome.Action
+import eu.metatools.wepwawet.tools.IndexFunction0
+import eu.metatools.wepwawet.tools.IndexFunction1
+import eu.metatools.wepwawet.tools.IndexFunction2
+import eu.metatools.wepwawet.tools.indexFunction
 import kotlin.reflect.KMutableProperty
 import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty
@@ -204,6 +208,42 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     }
 
     /**
+     * A proxy for an entity, i.e., to be resolved by the container.
+     */
+    private data class EntityProxy(val id: List<Any>)
+
+    /**
+     * Tries to convert to a proxy or returns identity.
+     */
+    private fun tryToProxy(any: Any?) =
+            if (any is Entity)
+                toProxy(any)
+            else
+                any
+
+    /**
+     * Tries to convert from a proxy or returns identity.
+     */
+    private fun tryFromProxy(any: Any?) =
+            if (any is EntityProxy)
+                fromProxy(any)
+            else
+                any
+
+
+    /**
+     * Converts to a proxy.
+     */
+    private fun toProxy(entity: Entity) =
+            EntityProxy(entity.primaryKey())
+
+    /**
+     * Converts from a proxy.
+     */
+    private fun fromProxy(entityProxy: EntityProxy) =
+            container.find(entityProxy.id)
+
+    /**
      * A tracking property identifying the entity.
      */
     private class Key<in R : Entity, T>(initial: T) : Delegate<R, T> {
@@ -236,13 +276,21 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     }
 
     /**
-     * Creates and registers a key.
+     * Creates and registers a key. If [T] is an entity, the [primaryKey] of the value will be used instead.
      */
     @Suppress("unchecked_cast")
     protected fun <R : Entity, T : Any> R.key(initial: T) = Provider { r: R, _ ->
         // Return key, also add the internal getter to the key providers
+
         Key<R, T>(initial).also {
-            r.keys.add { it.status }
+            r.keys.add {
+                it.status.let {
+                    if (it is Entity)
+                        it.primaryKey()
+                    else
+                        it
+                }
+            }
         }
     }
 
@@ -278,14 +326,31 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     protected fun <R : Entity, T> R.prop(initial: T): Delegate<R, T> =
             Property(initial)
 
+    /**
+     * Utility function for time substitution used in delayed impulses.
+     */
+    private inline fun untrackedOffsetRun(time: Int, block: () -> Unit) {
+        // Store and change tracking and container time
+        val prevTracking = tracking.get()
+        val prevTime = container.time
+
+        tracking.set(false)
+        container.time = time
+
+        block()
+
+        // Restore
+        container.time = prevTime
+        tracking.set(prevTracking)
+    }
 
     /**
      * An impulse without arguments.
      */
     private class UnitImpulse<in R : Entity>(
             val call: Byte,
-            val block: R.() -> Unit) : Delegate<R, () -> Unit> {
-        override fun getValue(r: R, p: KProperty<*>) = { ->
+            val block: R.() -> Unit) : Delegate<R, IndexFunction0<Int, Unit>> {
+        override fun getValue(r: R, p: KProperty<*>) = indexFunction<Int, Unit>({ ->
             // Check that key is present
             if (!r.hasKey())
                 throw IllegalStateException("Cannot call impulse entity without key.")
@@ -300,7 +365,16 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
                 r.container.dispatch(r.container.rev(), key, call, Unit)
                 r.container.incInner()
             }
-        }
+        }, { delay ->
+            if (delay < 0)
+                throw IllegalArgumentException("Cannot use negative delay.")
+            else if (delay == 0)
+                this()
+            else
+                r.untrackedOffsetRun(r.container.time + delay) {
+                    this()
+                }
+        })
     }
 
     /**
@@ -320,12 +394,12 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
     }
 
     /**
-     * An impulse with one argument.
+     * An impulse with one argument. Entity arguments will be dispatched via their [primaryKey].
      */
     private class Impulse<in R : Entity, T>(
             val call: Byte,
-            val block: R.(T) -> Unit) : Delegate<R, (T) -> Unit> {
-        override fun getValue(r: R, p: KProperty<*>) = { t: T ->
+            val block: R.(T) -> Unit) : Delegate<R, IndexFunction1<T, Int, Unit>> {
+        override fun getValue(r: R, p: KProperty<*>) = indexFunction<T, Int, Unit>({ t ->
             // Check that key is present
             if (!r.hasKey())
                 throw IllegalStateException("Cannot call impulse entity without key.")
@@ -336,15 +410,25 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             if (tracking.get())
                 r.block(t)
             else {
-                r.container.receive(r.container.rev(), key, call, t)
-                r.container.dispatch(r.container.rev(), key, call, t)
+                val arg = r.tryToProxy(t)
+                r.container.receive(r.container.rev(), key, call, arg)
+                r.container.dispatch(r.container.rev(), key, call, arg)
                 r.container.incInner()
             }
-        }
+        }, { t, delay ->
+            if (delay < 0)
+                throw IllegalArgumentException("Cannot use negative delay.")
+            else if (delay == 0)
+                this(t)
+            else
+                r.untrackedOffsetRun(r.container.time + delay) {
+                    this(t)
+                }
+        })
     }
 
     /**
-     * Creates and registers an impulse.
+     * Creates and registers an impulse. Entity arguments will be dispatched via their [primaryKey].
      */
     @Suppress("unchecked_cast")
     @JvmName("impulse")
@@ -353,19 +437,19 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             throw IllegalArgumentException("Impulses cannot be mutable fields.")
 
         r.table.add { a ->
-            block(a as T)
+            block(tryFromProxy(a) as T)
         }
 
         Impulse((r.table.size - 1).toByte(), block)
     }
 
     /**
-     * An impulse with two arguments.
+     * An impulse with two arguments. Entity arguments will be dispatched via their [primaryKey].
      */
     private class BiImpulse<in R : Entity, T, U>(
             val call: Byte,
-            val block: R.(T, U) -> Unit) : Delegate<R, (T, U) -> Unit> {
-        override fun getValue(r: R, p: KProperty<*>) = { t: T, u: U ->
+            val block: R.(T, U) -> Unit) : Delegate<R, IndexFunction2<T, U, Int, Unit>> {
+        override fun getValue(r: R, p: KProperty<*>) = indexFunction<T, U, Int, Unit>({ t, u ->
             // Check that key is present
             if (!r.hasKey())
                 throw IllegalStateException("Cannot call impulse entity without key.")
@@ -376,15 +460,25 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             if (tracking.get())
                 r.block(t, u)
             else {
-                r.container.receive(r.container.rev(), key, call, t to u)
-                r.container.dispatch(r.container.rev(), key, call, t to u)
+                val arg = r.tryToProxy(t) to r.tryToProxy(u)
+                r.container.receive(r.container.rev(), key, call, arg)
+                r.container.dispatch(r.container.rev(), key, call, arg)
                 r.container.incInner()
             }
-        }
+        }, { t, u, delay ->
+            if (delay < 0)
+                throw IllegalArgumentException("Cannot use negative delay.")
+            else if (delay == 0)
+                this(t, u)
+            else
+                r.untrackedOffsetRun(r.container.time + delay) {
+                    this(t, u)
+                }
+        })
     }
 
     /**
-     * Creates and registers an impulse.
+     * Creates and registers an impulse. Entity arguments will be dispatched via their [primaryKey].
      */
     @Suppress("unchecked_cast")
     @JvmName("biImpulse")
@@ -393,7 +487,9 @@ abstract class Entity(val container: Container, val autoKeyMode: AutoKeyMode = A
             throw IllegalArgumentException("Impulses cannot be mutable fields.")
 
         r.table.add { a ->
-            val (t, u) = a as Pair<T, U>
+            val arg = a as Pair<*, *>
+            val t = tryFromProxy(arg.first) as T
+            val u = tryFromProxy(arg.second) as U
             block(t, u)
         }
 

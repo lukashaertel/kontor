@@ -35,6 +35,11 @@ class Root(container: Container) : Entity(container, AutoKeyMode.PER_CLASS) {
 
     var ct by prop(0)
 
+    val clear by impulse { ->
+        for (c in children)
+            delete(c)
+        children = listOf()
+    }
 
     val cmd by impulse { arg: String ->
         ct += 1
@@ -91,7 +96,6 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
     var timeLabel by notNull<Label>()
     var apmLabel by notNull<Label>()
-    var apsLabel by notNull<Label>()
     var tasLabel by notNull<Label>()
     var entityTable by notNull<Table<Any>>()
     var cmdTable by notNull<Table<Any>>()
@@ -102,8 +106,12 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
         addComponent(Label("...").also { timeLabel = it })
         addComponent(Label("APM"))
         addComponent(Label("...").also { apmLabel = it })
-        addComponent(Label("APS"))
-        addComponent(Label("...").also { apsLabel = it })
+        addComponent(Button("Clear now") {
+            root.clear()
+        })
+        addComponent(Button("Clear in 3 seconds") {
+            root.clear[3000]()
+        })
         addComponent(Label("#TA"))
         addComponent(Label("...").also { tasLabel = it })
 
@@ -136,7 +144,6 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                 timeLabel.text = "$minutes:$seconds.$millis"
                 apmLabel.text = "${1000 * 60 * ac / time}"
-                apsLabel.text = "${1000 * ac / time}"
 
                 gui.guiThread.invokeAndWait {
                     entityTable.tableModel.apply {
@@ -150,7 +157,7 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
                 cmdTable.tableModel.apply {
                     if (randomTrue(.60))
-                        root.cmd(randomOf("add", "inc", "del").also {
+                        root.cmd(randomOf("add", "inc", "inc", "inc", "del").also {
                             gui.guiThread.invokeAndWait {
                                 insertRow(0, listOf("Root", "cmd($it)"))
                                 ac++
@@ -197,7 +204,6 @@ fun playGame(gui: MultiWindowTextGUI, container: Container, calls: Channel<CallC
 
 fun main(args: Array<String>) = runBlocking {
     term {
-        //TODO Some problem where game gets locked after clear
         // Create the container locations
         var x by notNull<Container>()
         var y by notNull<Container>()
