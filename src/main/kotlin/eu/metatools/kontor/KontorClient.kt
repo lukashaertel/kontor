@@ -27,7 +27,7 @@ import eu.metatools.common.*
  */
 class KontorClient(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>) : Kontor<Any?, Any?> {
+        val serializers: List<KSerializer<*>>) : KontorNetty<Any?, Any?> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 

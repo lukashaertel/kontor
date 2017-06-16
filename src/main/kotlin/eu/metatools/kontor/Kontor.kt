@@ -20,7 +20,27 @@ interface Kontor<out In, in Out> {
      * The outbound channel.
      */
     val outbound: SendChannel<Out>
+}
 
+/**
+ * Common interface for Pastry based Kontor connectivity classes.
+ */
+interface KontorPastry<out In, in Out> : Kontor<In, Out> {
+    /**
+     * Starts joining the ring and initializing the instance.
+     */
+    fun start(host:String, port: Int, instance: String): Job
+
+    /**
+     * Leaves the ring.
+     */
+    fun stop(): Job
+}
+
+/**
+ * Common interface for Netty based Kontor connectivity classes.
+ */
+interface KontorNetty<out In, in Out> : Kontor<In, Out> {
     /**
      * Starts a connection or opens for connecting.
      */

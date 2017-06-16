@@ -22,6 +22,7 @@ mainClassName = "eu.metatools.wepwawet.PlaygroundKt"
 
 repositories {
     mavenCentral()
+    maven { url "http://maven.nuiton.org/release/"}
     jcenter()
 }
 
@@ -36,6 +37,9 @@ dependencies {
     compile files("lib/kotlin-serialization-runtime.jar")
 
     compile "io.netty:netty-all:4.1.10.Final"
+
+    compile "org.freepastry:pastry:2.1"
+
     compile "com.google.guava:guava:22.0"
     compile "com.googlecode.lanterna:lanterna:3.0.0-rc1"
 }

@@ -6,6 +6,7 @@ import eu.metatools.kontor.server.Connected
 import eu.metatools.kontor.server.Disconnected
 import eu.metatools.kontor.server.From
 import eu.metatools.kontor.tools.*
+import io.netty.channel.Channel
 import kotlinx.coroutines.experimental.runBlocking
 import kotlin.serialization.Serializable
 
@@ -23,11 +24,11 @@ fun main(args: Array<String>) = runBlocking {
     val history = arrayListOf<Message>()
 
     // Network management messages
-    k.network choose { c: Connected ->
+    k.network choose { c: Connected<Channel> ->
         for (msg in history)
             c.channel.writeAndFlush(msg)
         println("Connected: ${c.channel.remoteAddress()}")
-    } pick { d: Disconnected ->
+    } pick { d: Disconnected<Channel> ->
         println("Disconnected: ${d.channel.remoteAddress()}")
     }
 
