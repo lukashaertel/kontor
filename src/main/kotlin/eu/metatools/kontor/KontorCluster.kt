@@ -30,7 +30,7 @@ class KontorCluster(
         val serializers: List<KSerializer<*>>,
         val stateTimeout: Long = 10000,
         val configurator: ProtocolStackConfigurator = DEFAULT_CONFIGURATOR)
-    : KontorJGroups<Any?, Any?>, KontorNetworked<Address> {
+    : KontorJGroups<From<Any?, Address>, To<Any?, Address>>, KontorNetworked<Address> {
     constructor(stateProsumer: Prosumer<*>, vararg serializers: KSerializer<*>)
             : this(stateProsumer = stateProsumer, serializers = listOf(*serializers))
 
@@ -178,7 +178,7 @@ class KontorCluster(
             override fun receive(msg: Message) = runBlocking {
                 // Get a readable stream and decode into receiver channel
                 val stream = ByteArrayDataInputStream(msg.rawBuffer, msg.offset, msg.length)
-                inbound.send(decode(stream))
+                inbound.send(From(decode(stream), msg.src))
             }
         }
     }
@@ -201,21 +201,28 @@ class KontorCluster(
         channel.getState(null, stateTimeout)
     }
 
-    override val inbound = Channel<Any?>()
+    override val inbound = Channel<From<Any?, Address>>()
 
-    // TODO: Directed output like KontorServer
-
-    override val outbound = actor<Any?>(CommonPool) {
+    override val outbound = actor<To<Any?, Address>>(CommonPool) {
         // Share one stream
         val stream = ByteArrayDataOutputStream()
         // For all incoming messages
         for (msg in channel) {
             // Reset position and encode into stream
             stream.position(0)
-            encode(stream, msg)
+            encode(stream, msg.content)
 
-            // Send to all the encoded message
-            this@KontorCluster.channel.send(null, stream.buffer(), 0, stream.position())
+            // Dispatch on target type
+            when (msg) {
+                is ToOnly<Any?, Address> ->
+                    this@KontorCluster.channel.send(msg.to, stream.buffer(), 0, stream.position())
+                is ToAll<Any?, Address> ->
+                    this@KontorCluster.channel.send(null, stream.buffer(), 0, stream.position())
+                is ToAllExcept<Any?, Address> ->
+                    for (m in this@KontorCluster.members)
+                        if (m != msg.except)
+                            this@KontorCluster.channel.send(m, stream.buffer(), 0, stream.position())
+            }
         }
     }
 

@@ -2,8 +2,10 @@ package eu.metatools.kontor
 
 import eu.metatools.common.consoleLines
 import eu.metatools.common.pick
+import eu.metatools.kontor.tools.sendAll
 import eu.metatools.kontor.tools.toProsumer
 import kotlinx.coroutines.experimental.runBlocking
+import org.jgroups.Address
 import kotlin.serialization.Serializable
 
 @Serializable
@@ -30,7 +32,7 @@ fun main(args: Array<String>) = runBlocking {
     k.management.close()
 
     // Handling of messages
-    k.inbound pick { msg: Message ->
+    k.inbound pick { (msg, _): From<Message, Address> ->
         history += msg
         println(msg)
     }
@@ -42,7 +44,7 @@ fun main(args: Array<String>) = runBlocking {
 
     // User input
     for (s in consoleLines)
-        k.outbound.send(Message(username, s))
+        k.outbound.sendAll(Message(username, s))
 
 
     println("Stopping server")

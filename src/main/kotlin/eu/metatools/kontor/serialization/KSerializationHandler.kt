@@ -16,6 +16,7 @@ class KSerializationHandler(
         private val encoder: KSerializationEncoder = KSerializationEncoder(charset, serializers)) :
         ChannelInboundHandler by decoder,
         ChannelOutboundHandler by encoder {
+    @Suppress("deprecation", "overridingDeprecatedMember")
     override fun exceptionCaught(ctx: ChannelHandlerContext?, cause: Throwable?) {
         decoder.exceptionCaught(ctx, cause)
         encoder.exceptionCaught(ctx, cause)

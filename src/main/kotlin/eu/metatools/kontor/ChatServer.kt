@@ -3,7 +3,6 @@ package eu.metatools.kontor
 import eu.metatools.common.choose
 import eu.metatools.common.consoleLines
 import eu.metatools.common.pick
-import eu.metatools.kontor.server.From
 import eu.metatools.kontor.tools.await
 import eu.metatools.kontor.tools.sendAll
 import eu.metatools.kontor.tools.sendAllExcept
@@ -36,7 +35,7 @@ fun main(args: Array<String>) = runBlocking {
     }
 
     // Handling of messages
-    k.inbound pick { (msg, c): From<Message> ->
+    k.inbound pick { (msg, c): From<Message, Channel> ->
         history += msg
         println(msg)
 

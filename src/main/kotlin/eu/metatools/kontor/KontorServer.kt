@@ -2,7 +2,6 @@ package eu.metatools.kontor
 
 import eu.metatools.kontor.serialization.KSerializationHandler
 import eu.metatools.kontor.serialization.serializerOf
-import eu.metatools.kontor.server.*
 import eu.metatools.kontor.tools.*
 import io.netty.channel.Channel
 import io.netty.channel.ChannelFuture
@@ -32,7 +31,7 @@ import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 class KontorServer(
         val charset: Charset = Charsets.UTF_8,
         val serializers: List<KSerializer<*>>,
-        val backlog: Int = 128) : KontorNetty<From<Any>, To<Any>>, KontorNetworked<Channel> {
+        val backlog: Int = 128) : KontorNetty<From<Any, Channel>, To<Any, Channel>>, KontorNetworked<Channel> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -155,17 +154,17 @@ class KontorServer(
     /**
      * The inbound data channel.
      */
-    override val inbound = DataChannel<From<Any>>()
+    override val inbound = DataChannel<From<Any, Channel>>()
 
     /**
      * The outbound data broadcast channel.
      */
-    override val outbound = actor<To<Any>>(CommonPool) {
+    override val outbound = actor<To<Any, Channel>>(CommonPool) {
         for (msg in channel)
             when (msg) {
-                is ToAll<Any> -> for (c in channels) c.writeAndFlush(msg.content)
-                is ToAllExcept<Any> -> for (c in channels) if (c != msg.except) c.writeAndFlush(msg.content)
-                is ToOnly<Any> -> msg.to.writeAndFlush(msg.content)
+                is ToAll<Any, Channel> -> for (c in channels) c.writeAndFlush(msg.content)
+                is ToAllExcept<Any, Channel> -> for (c in channels) if (c != msg.except) c.writeAndFlush(msg.content)
+                is ToOnly<Any, Channel> -> msg.to.writeAndFlush(msg.content)
             }
 
     }
