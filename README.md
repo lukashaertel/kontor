@@ -7,7 +7,7 @@ The project should build out of the box. To run properly in IntelliJ, edit the r
 ![IntelliJ run configuration](https://github.com/lukashaertel/kontor/raw/wsdata/config.png)
 
 ## Kontor
-A network server and client library supporting arbitrary message types and generalized inbound/outbound channels. This project demonstrates some experimental Kotlin features, namely [Coroutines](https://github.com/Kotlin/kotlinx.coroutines) and the [Serialization Prototype](https://github.com/elizarov/KotlinSerializationPrototypePlayground).
+A network server, client, and cluster node library supporting arbitrary message types and generalized inbound/outbound channels. This project demonstrates some experimental Kotlin features, namely [Coroutines](https://github.com/Kotlin/kotlinx.coroutines) and the [Serialization Prototype](https://github.com/elizarov/KotlinSerializationPrototypePlayground).
 
 ## Rome
 Rome provides a simple to implement *do* and *undo* timeline. *do*s may return a carry-over state that can be used by *undo* to revert the action. The repository supports dropping unneeded actions and setting a *soft upper boundary* to view previous states and prevent execution of actions in the "future".
