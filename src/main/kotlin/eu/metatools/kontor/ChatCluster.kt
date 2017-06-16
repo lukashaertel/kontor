@@ -31,16 +31,16 @@ fun main(args: Array<String>) = runBlocking {
     // Network management messages are not handled
     k.management.close()
 
+    // Request message history
+    k.requestState()
+    for (msg in history.messages)
+        println(msg)
+
     // Handling of messages
     k.inbound pick { (msg, _): From<Message, Address> ->
         history += msg
         println(msg)
     }
-
-    // Request message history
-    k.requestState()
-    for (msg in history.messages)
-        println(msg)
 
     // User input
     for (s in consoleLines)
