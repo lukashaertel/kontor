@@ -3,12 +3,12 @@ package eu.metatools.kontor
 import eu.metatools.kontor.serialization.KSerializationHandler
 import eu.metatools.kontor.serialization.serializerOf
 import eu.metatools.kontor.server.*
-import eu.metatools.kontor.server.Connected
-import eu.metatools.kontor.server.Disconnected
-import eu.metatools.kontor.server.Network
 import eu.metatools.kontor.tools.*
-import io.netty.channel.*
+import io.netty.channel.Channel
+import io.netty.channel.ChannelFuture
 import io.netty.channel.ChannelHandler.Sharable
+import io.netty.channel.ChannelHandlerContext
+import io.netty.channel.ChannelInboundHandlerAdapter
 import io.netty.channel.ChannelOption.SO_BACKLOG
 import io.netty.channel.ChannelOption.SO_KEEPALIVE
 import io.netty.channel.nio.NioEventLoopGroup
@@ -25,14 +25,14 @@ import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
 /**
  * Provides network interaction as a server. [inbound] will receive all incoming messages, [outbound] will take all
- * outgoing messages. Network status may be queried by calling [channels] or by subscribing to [network].
+ * outgoing messages. Network status may be queried by calling [channels] or by subscribing to [management].
  *
  * As server side sending requires designation, [inbound] and [outbound] are enveloped using [From] and [To]
  */
 class KontorServer(
         val charset: Charset = Charsets.UTF_8,
         val serializers: List<KSerializer<*>>,
-        val backlog: Int = 128) : KontorNetty<From<Any>, To<Any>> {
+        val backlog: Int = 128) : KontorNetty<From<Any>, To<Any>>, KontorNetworked<Channel> {
     constructor(vararg serializers: KSerializer<*>)
             : this(serializers = listOf(*serializers))
 
@@ -73,7 +73,7 @@ class KontorServer(
     /**
      * Mutable channel list for connection maintenance.
      */
-    private val mutableChannels = arrayListOf<Channel>()
+    private var mutableChannels = listOf<Channel>()
 
 
     /**
@@ -86,14 +86,36 @@ class KontorServer(
      */
     @Sharable
     private inner class InwardsHandler : ChannelInboundHandlerAdapter() {
-        override fun channelActive(ctx: ChannelHandlerContext) = runBlocking {
+        override fun channelActive(ctx: ChannelHandlerContext) {
+            // Mutate channel state
             mutableChannels += ctx.channel()
-            network.send(Connected(channels, ctx.channel()))
+
+            if (!management.isClosedForSend) {
+                // Bind for job
+                val channels = channels
+                val channel = ctx.channel()
+
+                // Launch send job
+                launch(CommonPool) {
+                    management.send(Connected(channels, channel))
+                }
+            }
         }
 
-        override fun channelInactive(ctx: ChannelHandlerContext) = runBlocking {
+        override fun channelInactive(ctx: ChannelHandlerContext) {
+            // Mutate channel state
             mutableChannels -= ctx.channel()
-            network.send(Disconnected(channels, ctx.channel()))
+
+            if (!management.isClosedForSend) {
+                // Bind for job
+                val channels = channels
+                val channel = ctx.channel()
+
+                // Launch send job
+                launch(CommonPool) {
+                    management.send(Disconnected(channels, channel))
+                }
+            }
         }
 
         override fun channelRead(ctx: ChannelHandlerContext, msg: Any) = runBlocking {
@@ -128,7 +150,7 @@ class KontorServer(
     /**
      * The channel to receive connection updates.
      */
-    val network = DataChannel<Network<Channel>>()
+    override val management = DataChannel<Network<Channel>>()
 
     /**
      * The inbound data channel.

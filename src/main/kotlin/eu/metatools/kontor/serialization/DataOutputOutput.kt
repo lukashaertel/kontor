@@ -1,29 +1,29 @@
 package eu.metatools.kontor.serialization
 
 import io.netty.buffer.ByteBuf
-import rice.p2p.commonapi.rawserialization.OutputBuffer
+import java.io.DataOutput
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
 import kotlin.serialization.ElementValueOutput
 
 /**
- * Serialization target writing into a Pastry [OutputBuffer].
+ * Serialization target writing into a Netty [ByteBuf].
  */
-class OutputBufferOutput(val outputBuffer: OutputBuffer, val charset: Charset = Charsets.UTF_8) : ElementValueOutput() {
+class DataOutputOutput(val dataOutput: DataOutput, val charset: Charset = Charsets.UTF_8) : ElementValueOutput() {
     override fun writeBooleanValue(value: Boolean) {
-        outputBuffer.writeBoolean(value)
+        dataOutput.writeBoolean(value)
     }
 
     override fun writeByteValue(value: Byte) {
-        outputBuffer.writeByte(value)
+        dataOutput.writeByte(value.toInt())
     }
 
     override fun writeCharValue(value: Char) {
-        outputBuffer.writeChar(value)
+        dataOutput.writeChar(value.toInt())
     }
 
     override fun writeDoubleValue(value: Double) {
-        outputBuffer.writeDouble(value)
+        dataOutput.writeDouble(value)
     }
 
     override fun <T : Enum<T>> writeEnumValue(enumClass: KClass<T>, value: T) {
@@ -31,32 +31,32 @@ class OutputBufferOutput(val outputBuffer: OutputBuffer, val charset: Charset = 
     }
 
     override fun writeFloatValue(value: Float) {
-        outputBuffer.writeFloat(value)
+        dataOutput.writeFloat(value)
     }
 
     override fun writeIntValue(value: Int) {
-        outputBuffer.writeInt(value)
+        dataOutput.writeInt(value)
     }
 
     override fun writeLongValue(value: Long) {
-        outputBuffer.writeLong(value)
+        dataOutput.writeLong(value)
     }
 
     override fun writeNotNullMark() {
-        outputBuffer.writeBoolean(true)
+        dataOutput.writeBoolean(true)
     }
 
     override fun writeNullValue() {
-        outputBuffer.writeBoolean(false)
+        dataOutput.writeBoolean(false)
     }
 
     override fun writeShortValue(value: Short) {
-        outputBuffer.writeShort(value)
+        dataOutput.writeShort(value.toInt())
     }
 
     override fun writeStringValue(value: String) {
         val bytes = value.toByteArray(charset)
-        outputBuffer.writeShort(bytes.size.toShort())
-        outputBuffer.write(bytes, 0, bytes.size)
+        dataOutput.writeShort(bytes.size)
+        dataOutput.write(bytes)
     }
 }

@@ -1,17 +1,20 @@
 package eu.metatools.kontor
 
+import eu.metatools.common.choose
 import eu.metatools.common.consoleLines
-import eu.metatools.common.*
-import eu.metatools.kontor.server.Connected
-import eu.metatools.kontor.server.Disconnected
+import eu.metatools.common.pick
 import eu.metatools.kontor.server.From
-import eu.metatools.kontor.tools.*
+import eu.metatools.kontor.tools.await
+import eu.metatools.kontor.tools.sendAll
+import eu.metatools.kontor.tools.sendAllExcept
 import io.netty.channel.Channel
 import kotlinx.coroutines.experimental.runBlocking
 import kotlin.serialization.Serializable
 
 @Serializable
-data class Message(val username: String, val string: String)
+data class Message(val username: String, val string: String) {
+    override fun toString() = "$username: $string"
+}
 
 fun main(args: Array<String>) = runBlocking {
     val k = KontorServer(Message::class)
@@ -24,7 +27,7 @@ fun main(args: Array<String>) = runBlocking {
     val history = arrayListOf<Message>()
 
     // Network management messages
-    k.network choose { c: Connected<Channel> ->
+    k.management choose { c: Connected<Channel> ->
         for (msg in history)
             c.channel.writeAndFlush(msg)
         println("Connected: ${c.channel.remoteAddress()}")
@@ -35,7 +38,7 @@ fun main(args: Array<String>) = runBlocking {
     // Handling of messages
     k.inbound pick { (msg, c): From<Message> ->
         history += msg
-        println("${msg.username}: ${msg.string}")
+        println(msg)
 
         // Loopback any message
         k.outbound.sendAllExcept(msg, c)

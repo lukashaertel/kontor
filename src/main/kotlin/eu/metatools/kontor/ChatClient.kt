@@ -1,8 +1,8 @@
 package eu.metatools.kontor
 
 import eu.metatools.common.consoleLines
-import eu.metatools.common.*
-import eu.metatools.kontor.tools.*
+import eu.metatools.common.pick
+import eu.metatools.kontor.tools.await
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
@@ -17,8 +17,8 @@ fun main(args: Array<String>) = runBlocking {
     val username = readLine()!!
 
     // Handling of messages
-    k.inbound pick { (n, s): Message ->
-        println("$n: $s")
+    k.inbound pick { msg: Message ->
+        println(msg)
     }
 
     // Handling of input

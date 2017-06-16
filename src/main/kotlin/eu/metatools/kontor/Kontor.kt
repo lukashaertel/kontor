@@ -2,10 +2,10 @@ package eu.metatools.kontor
 
 import io.netty.channel.ChannelFuture
 import kotlinx.coroutines.experimental.Job
-import kotlinx.coroutines.experimental.channels.ActorJob
+import kotlinx.coroutines.experimental.Unconfined
 import kotlinx.coroutines.experimental.channels.ReceiveChannel
 import kotlinx.coroutines.experimental.channels.SendChannel
-import kotlinx.coroutines.experimental.channels.Channel as DataChannel
+import kotlinx.coroutines.experimental.launch
 
 /**
  * Common interface for Kontor connectivity classes.
@@ -20,19 +20,34 @@ interface Kontor<out In, in Out> {
      * The outbound channel.
      */
     val outbound: SendChannel<Out>
+
+    /**
+     * Shuts down underlying workers, the respective class will not be usable after this.
+     */
+    fun shutdown(): Job = launch(Unconfined) {}
 }
 
 /**
- * Common interface for Pastry based Kontor connectivity classes.
+ * Common interface for Kontor connectivity classes with network state management.
  */
-interface KontorPastry<out In, in Out> : Kontor<In, Out> {
+interface KontorNetworked<out M> {
     /**
-     * Starts joining the ring and initializing the instance.
+     * Channel of network change maintenance.
      */
-    fun start(host:String, port: Int, instance: String): Job
+    val management: ReceiveChannel<Network<M>>
+}
+
+/**
+ * Common interface for JGroups bases Kontor connectivity classes.
+ */
+interface KontorJGroups<out In, in Out> : Kontor<In, Out> {
+    /**
+     * Joins a cluster.
+     */
+    fun start(clusterName: String): Job
 
     /**
-     * Leaves the ring.
+     * Leaves a cluster.
      */
     fun stop(): Job
 }
@@ -50,9 +65,4 @@ interface KontorNetty<out In, in Out> : Kontor<In, Out> {
      * Stops a connection or serving.
      */
     fun stop(): ChannelFuture
-
-    /**
-     * Shuts down underlying workers, the respective class will not be usable after this.
-     */
-    fun shutdown(): Job
 }

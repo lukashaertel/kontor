@@ -1,29 +1,29 @@
 package eu.metatools.kontor.serialization
 
 import io.netty.buffer.ByteBuf
-import rice.p2p.commonapi.rawserialization.InputBuffer
+import java.io.DataInput
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
 import kotlin.serialization.ElementValueInput
 
 /**
- * Serialization source reading from a Pastry [InputBuffer].
+ * Serialization source reading from a Netty [ByteBuf].
  */
-class InputBufferInput(val inputBuffer: InputBuffer, val charset: Charset = Charsets.UTF_8) : ElementValueInput() {
+class DataInputInput(val dataInput: DataInput, val charset: Charset = Charsets.UTF_8) : ElementValueInput() {
     override fun readBooleanValue(): Boolean {
-        return inputBuffer.readBoolean()
+        return dataInput.readBoolean()
     }
 
     override fun readByteValue(): Byte {
-        return inputBuffer.readByte()
+        return dataInput.readByte()
     }
 
     override fun readCharValue(): Char {
-        return inputBuffer.readChar()
+        return dataInput.readChar()
     }
 
     override fun readDoubleValue(): Double {
-        return inputBuffer.readDouble()
+        return dataInput.readDouble()
     }
 
     override fun <T : Enum<T>> readEnumValue(enumClass: KClass<T>): T {
@@ -31,29 +31,29 @@ class InputBufferInput(val inputBuffer: InputBuffer, val charset: Charset = Char
     }
 
     override fun readFloatValue(): Float {
-        return inputBuffer.readFloat()
+        return dataInput.readFloat()
     }
 
     override fun readIntValue(): Int {
-        return inputBuffer.readInt()
+        return dataInput.readInt()
     }
 
     override fun readLongValue(): Long {
-        return inputBuffer.readLong()
+        return dataInput.readLong()
     }
 
     override fun readNotNullMark(): Boolean {
-        return inputBuffer.readBoolean()
+        return dataInput.readBoolean()
     }
 
     override fun readShortValue(): Short {
-        return inputBuffer.readShort()
+        return dataInput.readShort()
     }
 
     override fun readStringValue(): String {
-        val size = inputBuffer.readShort()
+        val size = dataInput.readShort()
         val buffer = ByteArray(size.toInt())
-        inputBuffer.read(buffer, 0, size.toInt())
+        dataInput.readFully(buffer, 0, size.toInt())
         return String(buffer, charset)
     }
 }

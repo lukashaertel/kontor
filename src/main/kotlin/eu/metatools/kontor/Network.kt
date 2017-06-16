@@ -1,6 +1,4 @@
-package eu.metatools.kontor.server
-
-import io.netty.channel.Channel
+package eu.metatools.kontor
 
 /**
  * A network update message.
