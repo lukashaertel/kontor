@@ -8,7 +8,7 @@ import eu.metatools.kontor.tools.sendAll
 import eu.metatools.kontor.tools.sendAllExcept
 import io.netty.channel.Channel
 import kotlinx.coroutines.experimental.runBlocking
-import kotlin.serialization.Serializable
+import kotlinx.serialization.Serializable
 
 @Serializable
 data class Message(val username: String, val string: String) {

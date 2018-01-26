@@ -4,16 +4,17 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandler
 import io.netty.channel.ChannelOutboundHandler
 import java.nio.charset.Charset
-import kotlin.serialization.KSerializer
+import kotlinx.serialization.KSerializer
+import kotlin.reflect.KClass
 
 /**
  * A duplex implementation serialization and deserialization using [KSerializationEncoder] and [KSerializationDecoder].
  */
 class KSerializationHandler(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>,
-        private val decoder: KSerializationDecoder = KSerializationDecoder(charset, serializers),
-        private val encoder: KSerializationEncoder = KSerializationEncoder(charset, serializers)) :
+        val classes: List<KClass<*>>,
+        private val decoder: KSerializationDecoder = KSerializationDecoder(charset, classes),
+        private val encoder: KSerializationEncoder = KSerializationEncoder(charset, classes)) :
         ChannelInboundHandler by decoder,
         ChannelOutboundHandler by encoder {
     @Suppress("deprecation", "overridingDeprecatedMember")

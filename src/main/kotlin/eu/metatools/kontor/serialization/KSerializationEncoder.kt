@@ -4,24 +4,26 @@ import io.netty.buffer.ByteBuf
 import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.MessageToByteEncoder
 import java.nio.charset.Charset
-import kotlin.serialization.KSerializer
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.serializer
+import kotlin.reflect.KClass
 
 /**
  * Kotlin Serialization Encoder, uses a list of serializers to encode messages.
  */
 class KSerializationEncoder(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>) : MessageToByteEncoder<Any?>() {
+        val classes: List<KClass<*>>) : MessageToByteEncoder<Any?>() {
 
     /**
      * Associate by the serialized class, retain index for writing to streams.
      */
-    val indication = serializers.withIndex().associate { it.value.serializableClass to it }
+    private val indication = classes.withIndex().associate { it.value to (it.index to it.value.serializer()) }
 
     private fun writeId(buf: ByteBuf, index: Int) =
-            if (serializers.size <= Byte.MAX_VALUE)
+            if (classes.size <= Byte.MAX_VALUE)
                 buf.writeByte(index)
-            else if (serializers.size <= Short.MAX_VALUE)
+            else if (classes.size <= Short.MAX_VALUE)
                 buf.writeShort(index)
             else
                 buf.writeInt(index)

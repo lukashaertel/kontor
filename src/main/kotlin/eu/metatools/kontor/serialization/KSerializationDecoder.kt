@@ -4,19 +4,23 @@ import io.netty.buffer.ByteBuf
 import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.ReplayingDecoder
 import java.nio.charset.Charset
-import kotlin.serialization.KSerializer
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.serializer
+import kotlin.reflect.KClass
 
 /**
  * Kotlin Serialization Decoder, uses a list of serializers to decode messages.
  */
 class KSerializationDecoder(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>) : ReplayingDecoder<Any?>() {
+        val classes: List<KClass<*>>) : ReplayingDecoder<Any?>() {
+
+    private val indication = classes.map { it.serializer() }
 
     private fun readId(buf: ByteBuf) =
-            if (serializers.size <= Byte.MAX_VALUE)
+            if (classes.size <= Byte.MAX_VALUE)
                 buf.readByte().toInt()
-            else if (serializers.size <= Short.MAX_VALUE)
+            else if (classes.size <= Short.MAX_VALUE)
                 buf.readShort().toInt()
             else
                 buf.readInt()
@@ -31,7 +35,7 @@ class KSerializationDecoder(
         }
 
         // Get serializer from list of known serializers
-        val serializer = serializers[index - 1]
+        val serializer = indication[index - 1]
 
         // Decode appropriately
         val decoder = ByteBufInput(buf, charset)

@@ -1,7 +1,6 @@
 package eu.metatools.kontor
 
 import eu.metatools.kontor.serialization.KSerializationHandler
-import eu.metatools.kontor.serialization.serializerOf
 import eu.metatools.kontor.tools.*
 import io.netty.channel.Channel
 import io.netty.channel.ChannelFuture
@@ -17,29 +16,24 @@ import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
-import kotlin.serialization.KSerializer
+import kotlinx.serialization.KSerializer
 import kotlinx.coroutines.experimental.channels.Channel as DataChannel
 
 import eu.metatools.common.*
+
 /**
  * Provides network interaction as a client. [inbound] will receive all incoming messages, [outbound] will take all
  * outgoing messages.
  */
 class KontorClient(
         val charset: Charset = Charsets.UTF_8,
-        val serializers: List<KSerializer<*>>) : KontorNetty<Any?, Any?> {
-    constructor(vararg serializers: KSerializer<*>)
-            : this(serializers = listOf(*serializers))
+        val classes: List<KClass<*>>) : KontorNetty<Any?, Any?> {
+    constructor(charset: Charset, vararg classes: KClass<*>) : this(
+            charset = charset,
+            classes = listOf(*classes))
 
-    constructor(charset: Charset, vararg serializers: KSerializer<*>)
-            : this(charset, listOf(*serializers))
-
-    constructor(vararg kClasses: KClass<*>)
-            : this(serializers = kClasses.map { serializerOf(it) })
-
-    constructor(charset: Charset, vararg kClasses: KClass<*>)
-            : this(charset, kClasses.map { serializerOf(it) })
-
+    constructor(vararg classes: KClass<*>) : this(
+            classes = listOf(*classes))
 
     /**
      * Main group for server message handling.
@@ -49,15 +43,16 @@ class KontorClient(
     /**
      * True if worker is still usable.
      */
-    private val groupUsable get() = !workerGroup.isShutdown &&
-            !workerGroup.isShuttingDown &&
-            !workerGroup.isTerminated
+    private val groupUsable
+        get() = !workerGroup.isShutdown &&
+                !workerGroup.isShuttingDown &&
+                !workerGroup.isTerminated
 
 
     /**
      * Main message transcoder.
      */
-    private val transcoder = KSerializationHandler(charset, serializers)
+    private val transcoder = KSerializationHandler(charset, classes)
 
 
     /**

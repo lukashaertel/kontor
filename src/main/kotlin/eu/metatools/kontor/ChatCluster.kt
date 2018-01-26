@@ -6,7 +6,7 @@ import eu.metatools.kontor.tools.sendAll
 import eu.metatools.kontor.tools.toProsumer
 import kotlinx.coroutines.experimental.runBlocking
 import org.jgroups.Address
-import kotlin.serialization.Serializable
+import kotlinx.serialization.Serializable
 
 @Serializable
 data class History(val messages: List<Message> = listOf()) {

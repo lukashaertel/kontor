@@ -4,8 +4,8 @@ import java.math.BigDecimal
 import java.util.*
 import kotlin.reflect.KClass
 import kotlin.reflect.full.companionObjectInstance
-import kotlin.serialization.*
-import kotlin.serialization.internal.*
+import kotlinx.serialization.*
+import kotlinx.serialization.internal.*
 
 /**
  * Safely casts [t] to [T], make sure the cast is valid!!!
@@ -31,15 +31,17 @@ class LinearInterpolator {
 
     private var weight = 0.0
 
-    private val doubleQueue get() = if (switch)
-        aDoubleQueue
-    else
-        bDoubleQueue
+    private val doubleQueue
+        get() = if (switch)
+            aDoubleQueue
+        else
+            bDoubleQueue
 
-    private val bigDecimalQueue get() = if (switch)
-        aBigDecimalQueue
-    else
-        bBigDecimalQueue
+    private val bigDecimalQueue
+        get() = if (switch)
+            aBigDecimalQueue
+        else
+            bBigDecimalQueue
 
 
     private val input = object : ElementValueInput() {
@@ -141,39 +143,10 @@ class LinearInterpolator {
         bBigDecimalQueue.clear()
     }
 
-    private fun <T : Any> detect(value: T): KSerializer<T> {
-        return when (value) {
-            is Long -> safeCast(LongSerializer)
-            is Boolean -> safeCast(BooleanSerializer)
-            is Unit -> safeCast(UnitSerializer)
-            is Short -> safeCast(ShortSerializer)
-            is Char -> safeCast(CharSerializer)
-            is String -> safeCast(StringSerializer)
-            is Byte -> safeCast(ByteSerializer)
-            is Float -> safeCast(FloatSerializer)
-            is Int -> safeCast(IntSerializer)
-
-        // Missing collections
-
-            else -> {
-                // Get kotlin class, it contains the companion object
-                val kClass = value.javaClass.kotlin
-
-                // Get the companion object as a serializer, that's where serialization info is stored
-                val kSerializer = kClass.companionObjectInstance as? KSerializer<*>
-                        ?: throw IllegalArgumentException("Not a serializable class")
-
-                // Match types, this should already be a safe cast
-                if (kSerializer.serializableClass != kClass)
-                    throw IllegalArgumentException("Serializer mismatching serialized class")
-
-                return safeCast(kSerializer)
-            }
-        }
-    }
 
     private fun <T : Any> put(value: T): KSerializer<T> {
-        val ser = detect(value)
+        @Suppress("unchecked_cast")
+        val ser = value::class.serializer() as KSerializer<T>
         output.write(ser, value)
         return ser
     }

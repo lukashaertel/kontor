@@ -2,7 +2,6 @@ package eu.metatools.kontor
 
 import eu.metatools.kontor.serialization.DataInputInput
 import eu.metatools.kontor.serialization.DataOutputOutput
-import eu.metatools.kontor.serialization.serializerOf
 import eu.metatools.kontor.tools.Prosumer
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.channels.Channel
@@ -18,7 +17,8 @@ import org.jgroups.util.ByteArrayDataOutputStream
 import java.io.*
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
-import kotlin.serialization.KSerializer
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.serializer
 
 /**
  * Provides network interaction as a cluster node. [inbound] will receive all incoming messages, [outbound] will take
@@ -26,34 +26,26 @@ import kotlin.serialization.KSerializer
  */
 class KontorCluster(
         val charset: Charset = Charsets.UTF_8,
-        val stateProsumer: Prosumer<*>,
-        val serializers: List<KSerializer<*>>,
+        val stateProsumer: Prosumer<*> = Prosumer.DISCARD,
+        val classes: List<KClass<*>>,
         val stateTimeout: Long = 10000,
         val configurator: ProtocolStackConfigurator = DEFAULT_CONFIGURATOR)
     : KontorJGroups<From<Any?, Address>, To<Any?, Address>>, KontorNetworked<Address> {
-    constructor(stateProsumer: Prosumer<*>, vararg serializers: KSerializer<*>)
-            : this(stateProsumer = stateProsumer, serializers = listOf(*serializers))
+    constructor(charset: Charset, stateProsumer: Prosumer<*>, vararg classes: KClass<*>) : this(
+            charset = charset,
+            stateProsumer = stateProsumer,
+            classes = listOf(*classes))
 
-    constructor(charset: Charset, stateProsumer: Prosumer<*>, vararg serializers: KSerializer<*>)
-            : this(charset, stateProsumer, listOf(*serializers))
+    constructor(stateProsumer: Prosumer<*>, vararg classes: KClass<*>) : this(
+            stateProsumer = stateProsumer,
+            classes = listOf(*classes))
 
-    constructor(stateProsumer: Prosumer<*>, vararg kClasses: KClass<*>)
-            : this(stateProsumer = stateProsumer, serializers = kClasses.map { serializerOf(it) })
+    constructor(charset: Charset, vararg classes: KClass<*>) : this(
+            charset = charset,
+            classes = listOf(*classes))
 
-    constructor(stateProsumer: Prosumer<*>, charset: Charset, vararg kClasses: KClass<*>)
-            : this(charset, stateProsumer, kClasses.map { serializerOf(it) })
-
-    constructor(vararg serializers: KSerializer<*>)
-            : this(stateProsumer = Prosumer.DISCARD, serializers = listOf(*serializers))
-
-    constructor(charset: Charset, vararg serializers: KSerializer<*>)
-            : this(charset, Prosumer.DISCARD, listOf(*serializers))
-
-    constructor(vararg kClasses: KClass<*>)
-            : this(stateProsumer = Prosumer.DISCARD, serializers = kClasses.map { serializerOf(it) })
-
-    constructor(charset: Charset, vararg kClasses: KClass<*>)
-            : this(charset, Prosumer.DISCARD, kClasses.map { serializerOf(it) })
+    constructor(vararg classes: KClass<*>) : this(
+            classes = listOf(*classes))
 
     companion object {
         /**
@@ -63,9 +55,14 @@ class KontorCluster(
     }
 
     /**
+     * Associated to serializer.
+     */
+    private val serializers = classes.map { it.serializer() }
+
+    /**
      * Associate by the serialized class, retain index for writing to streams.
      */
-    private val indication = serializers.withIndex().associate { it.value.serializableClass to it }
+    private val indication = classes.withIndex().associate { it.value to (it.index to it.value.serializer()) }
 
     /**
      * Mutable address list for connection maintenance.
@@ -76,9 +73,9 @@ class KontorCluster(
      * Writes the index in the appropriate size.
      */
     private fun writeId(output: DataOutput, index: Int) =
-            if (serializers.size <= Byte.MAX_VALUE)
+            if (classes.size <= Byte.MAX_VALUE)
                 output.writeByte(index)
-            else if (serializers.size <= Short.MAX_VALUE)
+            else if (classes.size <= Short.MAX_VALUE)
                 output.writeShort(index)
             else
                 output.writeInt(index)
@@ -87,9 +84,9 @@ class KontorCluster(
      * Reads the index in the appropriate size.
      */
     private fun readId(input: DataInput) =
-            if (serializers.size <= Byte.MAX_VALUE)
+            if (classes.size <= Byte.MAX_VALUE)
                 input.readByte().toInt()
-            else if (serializers.size <= Short.MAX_VALUE)
+            else if (classes.size <= Short.MAX_VALUE)
                 input.readShort().toInt()
             else
                 input.readInt()

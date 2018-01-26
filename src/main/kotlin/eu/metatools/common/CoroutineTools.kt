@@ -12,26 +12,20 @@ import kotlin.coroutines.experimental.CoroutineContext
 /**
  * Launches in the [context] a consumer feeding into [block].
  */
+@Deprecated("Old coroutine method")
 fun <T> ReceiveChannel<T>.launchConsumer(context: CoroutineContext, block: suspend (T) -> Unit) =
         launch(context) {
-            consumeEach(block)
+            while (isActive)
+                block(receive())
         }
 
 /**
  * [launchConsumer] with [CommonPool].
  */
+@Deprecated("Old coroutine method")
 fun <T> ReceiveChannel<T>.launchConsumer(block: suspend (T) -> Unit) =
         launchConsumer(CommonPool, block)
 
-/**
- * A receive channel that has a job running along with it.
- * @param E The type of the channel
- * @param job The job that is running along with the channel
- * @param receiveChannel The original receive channel
- */
-class JobBoundReceiveChannel<out E>(
-        val job: Job,
-        val receiveChannel: ReceiveChannel<E>) : ReceiveChannel<E> by receiveChannel, Job by job
 
 /**
  * Consumes from a channel of [T] all elements of type [U], returns a second channel where only non-[U] elements are
@@ -43,15 +37,16 @@ class JobBoundReceiveChannel<out E>(
  * @param block The block to run for the elements of type [U]
  * @return Returns a [Job] paired with a [ReceiveChannel] providing all remaining elements.
  */
+@Deprecated("Old coroutine method")
 inline fun <T, reified U : T> ReceiveChannel<T>.choose(
         context: CoroutineContext, noinline block: suspend (U) -> Unit) =
         Channel<T>().let { otherwise ->
-            JobBoundReceiveChannel(launchConsumer(context) {
+            launchConsumer(context) {
                 if (it is U)
                     block(it)
                 else
                     otherwise.send(it)
-            }, otherwise)
+            } to otherwise
         }
 
 /**
@@ -63,6 +58,7 @@ inline fun <T, reified U : T> ReceiveChannel<T>.choose(
  * @param block The block to run for the elements of type [U]
  * @return Returns a [Job] paired with a [ReceiveChannel] providing all remaining elements.
  */
+@Deprecated("Old coroutine method")
 inline infix fun <T, reified U : T> ReceiveChannel<T>.choose(noinline block: suspend (U) -> Unit) =
         choose(CommonPool, block)
 
@@ -70,9 +66,10 @@ inline infix fun <T, reified U : T> ReceiveChannel<T>.choose(noinline block: sus
  * Consumes all elements from a channel of [T], only for those that are of type [U], executes the block. If non-[U]
  * elements are of interest, [choose] should be used.
  */
+@Deprecated("Old coroutine method")
 inline fun <T, reified U : T> ReceiveChannel<T>.pick(
         context: CoroutineContext, noinline block: suspend (U) -> Unit) =
-        launchConsumer {
+        launchConsumer(context) {
             if (it is U)
                 block(it)
         }
@@ -80,17 +77,39 @@ inline fun <T, reified U : T> ReceiveChannel<T>.pick(
 /**
  * Consumes all elements from a channel of [T], only for those that are of type [U], executes the block.
  */
+@Deprecated("Old coroutine method")
 inline infix fun <T, reified U : T> ReceiveChannel<T>.pick(noinline block: suspend (U) -> Unit) =
         pick(CommonPool, block)
 
 /**
  * From a channel reads all items discarding them.
  */
+@Deprecated("Old coroutine method")
 fun ReceiveChannel<*>.discardRemaining(context: CoroutineContext) =
         launchConsumer(context) { }
 
 /**
  * From a channel reads all items discarding them.
  */
+@Deprecated("Old coroutine method")
 fun ReceiveChannel<*>.discardRemaining() =
         launchConsumer { }
+
+
+@Deprecated("Old coroutine method")
+inline fun <T, reified U : T> Pair<Job, ReceiveChannel<T>>.choose(
+        context: CoroutineContext, noinline block: suspend (U) -> Unit) =
+        second.choose(context, block)
+
+@Deprecated("Old coroutine method")
+inline infix fun <T, reified U : T> Pair<Job, ReceiveChannel<T>>.choose(noinline block: suspend (U) -> Unit) =
+        second.choose(CommonPool, block)
+
+@Deprecated("Old coroutine method")
+inline fun <T, reified U : T> Pair<Job, ReceiveChannel<T>>.pick(
+        context: CoroutineContext, noinline block: suspend (U) -> Unit) =
+        second.pick(context, block)
+
+@Deprecated("Old coroutine method")
+inline infix fun <T, reified U : T> Pair<Job, ReceiveChannel<T>>.pick(noinline block: suspend (U) -> Unit) =
+        second.pick(block)

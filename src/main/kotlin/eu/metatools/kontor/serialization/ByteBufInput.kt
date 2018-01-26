@@ -3,7 +3,7 @@ package eu.metatools.kontor.serialization
 import io.netty.buffer.ByteBuf
 import java.nio.charset.Charset
 import kotlin.reflect.KClass
-import kotlin.serialization.ElementValueInput
+import kotlinx.serialization.ElementValueInput
 
 /**
  * Serialization source reading from a Netty [ByteBuf].
