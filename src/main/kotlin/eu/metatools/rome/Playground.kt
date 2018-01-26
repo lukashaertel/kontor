@@ -58,12 +58,15 @@ fun main(args: Array<String>) {
     val r = Repo<Int>()
     r.insert(add(40), 10)
     r.insert(mul(2), 20)
+    // 40 * 2 = 80
 
     println(status)
     r.insert(sub(5), 5)
+    // (40-5) * 2 = 70
 
     println(status)
     r.insert(set(5), 15)
+    // 5 * 2 = 10
 
     println(status)
 
