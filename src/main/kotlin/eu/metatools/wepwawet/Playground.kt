@@ -92,7 +92,7 @@ data class CallComponents(
 
 var allContainers by notNull<List<Container>>()
 
-val simulatePing = false
+val simulatePing = true
 val pingMin = 15
 val pingMax = 75
 

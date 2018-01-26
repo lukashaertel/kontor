@@ -1,24 +1,15 @@
 package eu.metatools.kontor.serialization
 
+import eu.metatools.common.primitiveSerialContext
 import java.math.BigDecimal
 import java.util.*
-import kotlin.reflect.KClass
-import kotlin.reflect.full.companionObjectInstance
 import kotlinx.serialization.*
-import kotlinx.serialization.internal.*
 
-/**
- * Safely casts [t] to [T], make sure the cast is valid!!!
- */
-inline fun <reified T> safeCast(t: Any): T {
-    val x = t as T
-    return x
-}
 
 /**
  * Interpolates values that are [Serializable], including numeric primitives.
  */
-class LinearInterpolator {
+class LinearInterpolator(val serialContext: SerialContext? = primitiveSerialContext) {
     private val aDoubleQueue = LinkedList<Double>()
 
     private val aBigDecimalQueue = LinkedList<BigDecimal>()
@@ -146,7 +137,7 @@ class LinearInterpolator {
 
     private fun <T : Any> put(value: T): KSerializer<T> {
         @Suppress("unchecked_cast")
-        val ser = value::class.serializer() as KSerializer<T>
+        val ser = serialContext.valueSerializer(value) as KSerializer<T>
         output.write(ser, value)
         return ser
     }
